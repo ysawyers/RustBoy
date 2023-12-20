@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="wasm_exec.js"></script>
+    <title>Emufun</title>
+    <style>
+      * {
+        padding: 0;
+        margin: 0;
+      }
+      canvas {
+        border: 2px solid black;
+        border-radius: 2px;
+        padding: 1px;
+        background-color: lightgray;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="width: 100vw; height: 100vh; display: flex; justify-content: center">
+      <div style="margin-top: 2em">
+        <h1>Emufun</h1>
+        <!-- ORIG DIM: 64x32  -->
+        <div style="margin-top: 10px; display: flex">
+          <div>
+            <canvas id="emulator" width="800" height="600"></canvas>
+          </div>
+          <div style="margin-left: 20px">
+            <div style="width: fit-content">
+              <p style="margin-bottom: 5px">Choose Emulator:</p>
+              <select id="emulator-select" size="5">
+                <option value="chip8">CHIP-8</option>
+                <option value="gb">Game Boy</option>
+              </select>
+            </div>
+            <div style="margin-top: 15px">
+              <p style="margin-bottom: 5px">Choose ROM:</p>
+              <select id="rom-select-chip8" size="15" style="display: none">
+                <option value="PONG">PONG</option>
+                <option value="BRIX">BRIX</option>
+                <option value="FLIGHT">FLIGHT</option>
+                <option value="RPS">RPS</option>
+              </select>
+
+              <select id="rom-select-gb" size="15" style="display: none">
+                <option value="T11.gb">T11</option>
+                <option value="T10.gb">T10</option>
+                <option value="T9.gb">T9</option>
+                <option value="T8.gb">T8</option>
+                <option value="T7.gb">T7</option>
+                <option value="T6.gb">T6</option>
+                <option value="T5.gb">T5</option>
+                <option value="T4.gb">T4</option>
+                <option value="T3.gb">T3</option>
+                <option value="T1.gb">T1</option>
+                <option value="TIMING.gb">TIMING</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script src="wasm.js"></script>
+  <script src="scripts.js"></script>
+</html>
