@@ -1,3 +1,3 @@
-pub mod emulator;
 pub mod memory;
-pub mod cpu;
+pub mod core;
+pub mod ppu;
