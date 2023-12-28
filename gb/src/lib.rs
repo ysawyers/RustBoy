@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use crate::internal::core::component::CPU;
 
-mod internal;
+pub mod internal;
 
 #[wasm_bindgen]
 extern {

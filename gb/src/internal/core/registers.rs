@@ -1,14 +1,14 @@
 use std::ops::{Index, IndexMut};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Register {
     A, B, C, D, E, H, L, F
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Flag { Z, N, H, C }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct Registers {
     a: u8,
     b: u8,
@@ -96,9 +96,7 @@ impl Registers {
     }
 
     pub fn get_de(&self) -> u16 { ((self.d as u16) << 8) | (self.e as u16) }
-
     pub fn get_hl(&self) -> u16 { ((self.h as u16) << 8) | (self.l as u16) }
-
     pub fn get_bc(&self) -> u16 { ((self.b as u16) << 8) | (self.c as u16) }
 
     pub fn set_hl(&mut self, val: u16) {
@@ -109,6 +107,11 @@ impl Registers {
     pub fn set_bc(&mut self, val: u16) {
         self.b = ((val & 0xFF00) >> 8) as u8;
         self.c = (val & 0x00FF) as u8;
+    }
+
+    pub fn set_de(&mut self, val: u16) {
+        self.d = ((val & 0xFF00) >> 8) as u8;
+        self.e = (val & 0x00FF) as u8;
     }
 }
 
