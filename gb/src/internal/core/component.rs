@@ -1,3 +1,6 @@
+use crate::console_log;
+use crate::log;
+
 use crate::internal::ppu::component::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
@@ -5,11 +8,12 @@ use crate::internal::core::registers::{Register, Registers, Flag};
 const CYCLES_PER_FRAME: u32 = 69905;
 
 pub struct CPU {
-    pub bus: Memory,
     pub registers: Registers,
     pub pc: u16,
     pub sp: u16,
+    pub bus: Memory,
     ime: bool,
+    should_enable_ime: bool,
     tick_state: Option<TickState>
 }
 
@@ -125,10 +129,12 @@ pub enum MicroInstr {
     SCF,
     CCF,
     NOP,
+    HALT,
 
     // INTERRUPTS
     DI,
-    RETI
+    RETI,
+    EI
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -151,9 +157,15 @@ impl CPU {
         (opcode, self.decode_prefix_instr(opcode))
     }
 
-    pub fn execute(&mut self) {
+    fn execute(&mut self) {
+        if self.should_enable_ime {
+            self.should_enable_ime = false;
+            self.ime = true;
+        }
+
         if self.tick_state.is_none() {
             let instr = self.fetch_instr();
+
             let tick_state = TickState{
                 instr: instr.1,
                 step: 0,
@@ -164,20 +176,22 @@ impl CPU {
             self.tick_state.get_or_insert(tick_state);
         }
 
-        if self.tick_state.as_ref().unwrap().is_prefix {
-            let instr = self.fetch_prefix_instr();
+        let state = self.tick_state.as_mut().unwrap();
+
+        if state.is_prefix {
+            let instr: (u8, Vec<MicroInstr>) = self.fetch_prefix_instr();
+
             self.tick_state.as_mut().unwrap().instr = instr.1;
             self.tick_state.as_mut().unwrap().is_prefix = false;
             return
         }
 
-        let micro_instr = self.tick_state.as_ref().unwrap().instr[self.tick_state.as_ref().unwrap().step];
-        match micro_instr {
+        match state.instr[state.step] {
             MicroInstr::NOP => (),
             MicroInstr::Read(byte) => {
                 match byte {
-                    Byte::LSB => self.tick_state.as_mut().unwrap().b8 = self.bus.read(self.pc),
-                    Byte::MSB => self.tick_state.as_mut().unwrap().b16 = self.bus.read(self.pc)
+                    Byte::LSB => state.b8 = self.bus.read(self.pc),
+                    Byte::MSB => state.b16 = self.bus.read(self.pc)
                 }
                 self.pc += 1;
             },
@@ -210,18 +224,18 @@ impl CPU {
             },
             MicroInstr::LDNNR(preset, register, is_offset) => {
                 match preset {
-                    0 => self.bus.write(((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16), self.registers[register]),
+                    0 => self.bus.write(((state.b16 as u16) << 8) | (state.b8 as u16), self.registers[register]),
                     _ => {
-                        let addr = if is_offset { preset | self.tick_state.as_ref().unwrap().b8 as u16 } else { preset };
+                        let addr = if is_offset { preset | state.b8 as u16 } else { preset };
                         self.bus.write(addr, self.registers[register])
                     }
                 }
             },
             MicroInstr::LDRNN(register, preset, is_offset) => {
                 match preset {    
-                    0 => self.registers[register] = self.bus.read(((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16)),
+                    0 => self.registers[register] = self.bus.read(((state.b16 as u16) << 8) | (state.b8 as u16)),
                     _ => {
-                        let addr = if is_offset { preset | self.tick_state.as_ref().unwrap().b8 as u16 } else { preset };
+                        let addr = if is_offset { preset | state.b8 as u16 } else { preset };
                         self.registers[register] = self.bus.read(addr);
                     }
                 }
@@ -232,16 +246,16 @@ impl CPU {
                     return
                 }
             },
-            MicroInstr::JP => self.pc = ((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16),
-            MicroInstr::JR => self.pc = self.pc.wrapping_add_signed(self.tick_state.as_ref().unwrap().b8 as i8 as i16),
+            MicroInstr::JP => self.pc = ((state.b16 as u16) << 8) | (state.b8 as u16),
+            MicroInstr::JR => self.pc = self.pc.wrapping_add_signed(state.b8 as i8 as i16),
             MicroInstr::PUSH(val) => {
                 self.sp -= 1;
                 self.bus.write(self.sp, val);
             },
             MicroInstr::POPPC(byte) => {
                 match byte {
-                    Byte::LSB => self.tick_state.as_mut().unwrap().b8 = self.bus.read(self.sp),
-                    Byte::MSB => self.tick_state.as_mut().unwrap().b16 = self.bus.read(self.sp)
+                    Byte::LSB => state.b8 = self.bus.read(self.sp),
+                    Byte::MSB => state.b16 = self.bus.read(self.sp)
                 }
                 self.sp += 1;
             },
@@ -264,8 +278,11 @@ impl CPU {
             MicroInstr::INCHL => self.registers.set_hl(self.registers.get_hl().wrapping_add(1)),
             MicroInstr::INCBC => self.registers.set_bc(self.registers.get_bc().wrapping_add(1)),
             MicroInstr::INCDE => self.registers.set_de(self.registers.get_de().wrapping_add(1)),
-            MicroInstr::DI => self.ime = false,
-            MicroInstr::LDSPNN => self.sp = ((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16),
+            MicroInstr::DI => {
+                self.ime = false;
+                self.should_enable_ime = false;
+            },
+            MicroInstr::LDSPNN => self.sp = ((state.b16 as u16) << 8) | (state.b8 as u16),
             MicroInstr::OR(register) => {
                 self.registers[Register::A] |= self.registers[register];
                 self.registers.set_flag(Flag::Z, self.registers[Register::A] == 0);
@@ -287,10 +304,10 @@ impl CPU {
                 self.registers.set_flag(Flag::C, self.registers[Register::A] < self.registers[register]);
             },
             MicroInstr::CPN => {
-                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(self.tick_state.as_ref().unwrap().b8) == 0);
+                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(state.b8) == 0);
                 self.registers.set_flag(Flag::N, true);
-                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(self.tick_state.as_ref().unwrap().b8 & 0xF)) & 0x10) == 0x10);
-                self.registers.set_flag(Flag::C, self.registers[Register::A] < self.tick_state.as_ref().unwrap().b8);
+                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(state.b8 & 0xF)) & 0x10) == 0x10);
+                self.registers.set_flag(Flag::C, self.registers[Register::A] < state.b8);
             },
             MicroInstr::AND(register) => {
                 self.registers[Register::A] &= self.registers[register];
@@ -300,7 +317,7 @@ impl CPU {
                 self.registers.set_flag(Flag::C, false);
             },
             MicroInstr::ANDN => {
-                self.registers[Register::A] &= self.tick_state.as_ref().unwrap().b8;
+                self.registers[Register::A] &= state.b8;
                 self.registers.set_flag(Flag::Z, self.registers[Register::A] == 0);
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, true);
@@ -321,11 +338,11 @@ impl CPU {
                 self.registers[Register::A] = self.registers[Register::A].wrapping_add(self.registers[register]);
             },
             MicroInstr::ADDN => {
-                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_add(self.tick_state.as_ref().unwrap().b8) == 0);
+                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_add(state.b8) == 0);
                 self.registers.set_flag(Flag::N, false);
-                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_add(self.tick_state.as_ref().unwrap().b8 & 0xF)) & 0x10) == 0x10);
-                self.registers.set_flag(Flag::C, self.registers[Register::A] as u16 + self.tick_state.as_ref().unwrap().b8 as u16 > 0xFF);
-                self.registers[Register::A] = self.registers[Register::A].wrapping_add(self.tick_state.as_ref().unwrap().b8);
+                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_add(state.b8 & 0xF)) & 0x10) == 0x10);
+                self.registers.set_flag(Flag::C, self.registers[Register::A] as u16 + state.b8 as u16 > 0xFF);
+                self.registers[Register::A] = self.registers[Register::A].wrapping_add(state.b8);
             },
             MicroInstr::SUB(register) => {
                 self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(self.registers[register]) == 0);
@@ -335,11 +352,11 @@ impl CPU {
                 self.registers[Register::A] = self.registers[Register::A].wrapping_sub(self.registers[register]);
             },
             MicroInstr::SUBN => {
-                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(self.tick_state.as_ref().unwrap().b8) == 0);
+                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(state.b8) == 0);
                 self.registers.set_flag(Flag::N, true);
-                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(self.tick_state.as_ref().unwrap().b8 & 0xF)) & 0x10) == 0x10);
-                self.registers.set_flag(Flag::C, self.registers[Register::A] < self.tick_state.as_ref().unwrap().b8);
-                self.registers[Register::A] = self.registers[Register::A].wrapping_sub(self.tick_state.as_ref().unwrap().b8);
+                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(state.b8 & 0xF)) & 0x10) == 0x10);
+                self.registers.set_flag(Flag::C, self.registers[Register::A] < state.b8);
+                self.registers[Register::A] = self.registers[Register::A].wrapping_sub(state.b8);
             }
             MicroInstr::XOR(register) => {
                 self.registers[Register::A] ^= self.registers[register];
@@ -356,7 +373,7 @@ impl CPU {
                 self.registers.set_flag(Flag::C, false);
             },
             MicroInstr::XORN => {
-                self.registers[Register::A] ^= self.tick_state.as_ref().unwrap().b8;
+                self.registers[Register::A] ^= state.b8;
                 self.registers.set_flag(Flag::Z, self.registers[Register::A] == 0);
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, false);
@@ -417,11 +434,11 @@ impl CPU {
             },
             MicroInstr::ADCN => {
                 let c = self.registers.get_flag(Flag::C);
-                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_add(self.tick_state.as_ref().unwrap().b8).wrapping_add(c) == 0);
+                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_add(state.b8).wrapping_add(c) == 0);
                 self.registers.set_flag(Flag::N, false);
-                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_add(self.tick_state.as_ref().unwrap().b8 & 0xF).wrapping_add(c)) & 0x10) == 0x10);
-                self.registers.set_flag(Flag::C, ((self.registers[Register::A] as u16).wrapping_add(self.tick_state.as_ref().unwrap().b8 as u16).wrapping_add(c as u16)) > 0xFF);
-                self.registers[Register::A] = self.registers[Register::A].wrapping_add(self.tick_state.as_ref().unwrap().b8).wrapping_add(c);
+                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_add(state.b8 & 0xF).wrapping_add(c)) & 0x10) == 0x10);
+                self.registers.set_flag(Flag::C, ((self.registers[Register::A] as u16).wrapping_add(state.b8 as u16).wrapping_add(c as u16)) > 0xFF);
+                self.registers[Register::A] = self.registers[Register::A].wrapping_add(state.b8).wrapping_add(c);
             }
             MicroInstr::DECNN(addr) => {
                 self.registers.set_flag(Flag::Z, self.bus.read(addr).wrapping_sub(1) == 0);
@@ -443,9 +460,9 @@ impl CPU {
                 self.registers[Register::A] = self.registers[Register::A].wrapping_add(self.bus.read(self.registers.get_hl()));
             },
             MicroInstr::JPHL => self.pc = self.registers.get_hl(),
-            MicroInstr::LDHLN => self.bus.write(self.registers.get_hl(), self.tick_state.as_ref().unwrap().b8),
+            MicroInstr::LDHLN => self.bus.write(self.registers.get_hl(), state.b8),
             MicroInstr::ORN => {
-                self.registers[Register::A] |= self.tick_state.as_ref().unwrap().b8;
+                self.registers[Register::A] |= state.b8;
                 self.registers.set_flag(Flag::Z, self.registers[Register::A] == 0);
                 self.registers.set_flag(Flag::N, false);
                 self.registers.set_flag(Flag::H, false);
@@ -461,11 +478,11 @@ impl CPU {
             },
             MicroInstr::SBCN => {
                 let c = self.registers.get_flag(Flag::C);
-                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(self.tick_state.as_ref().unwrap().b8.wrapping_add(c)) == 0);
+                self.registers.set_flag(Flag::Z, self.registers[Register::A].wrapping_sub(state.b8.wrapping_add(c)) == 0);
                 self.registers.set_flag(Flag::N, true);
-                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(self.tick_state.as_ref().unwrap().b8 & 0xF).wrapping_sub(c)) & 0x10) == 0x10);
-                self.registers.set_flag(Flag::C, (self.registers[Register::A] as u16) < (self.tick_state.as_ref().unwrap().b8 as u16).wrapping_add(c as u16));
-                self.registers[Register::A] = self.registers[Register::A].wrapping_sub(self.tick_state.as_ref().unwrap().b8.wrapping_add(c));
+                self.registers.set_flag(Flag::H, (((self.registers[Register::A] & 0xF).wrapping_sub(state.b8 & 0xF).wrapping_sub(c)) & 0x10) == 0x10);
+                self.registers.set_flag(Flag::C, (self.registers[Register::A] as u16) < (state.b8 as u16).wrapping_add(c as u16));
+                self.registers[Register::A] = self.registers[Register::A].wrapping_sub(state.b8.wrapping_add(c));
             },
             MicroInstr::SBCHL => {
                 let c = self.registers.get_flag(Flag::C);
@@ -480,8 +497,8 @@ impl CPU {
             MicroInstr::DECHL => self.registers.set_hl(self.registers.get_hl().wrapping_sub(1)),
             MicroInstr::LDNNSP(byte) => {
                 match byte {
-                    Byte::LSB => self.bus.write(((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16), (self.sp & 0x00FF) as u8),
-                    Byte::MSB => self.bus.write((((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16)) + 1, ((self.sp & 0xFF00) >> 8) as u8),
+                    Byte::LSB => self.bus.write(((state.b16 as u16) << 8) | (state.b8 as u16), (self.sp & 0x00FF) as u8),
+                    Byte::MSB => self.bus.write((((state.b16 as u16) << 8) | (state.b8 as u16)) + 1, ((self.sp & 0xFF00) >> 8) as u8),
                 }
             },
             MicroInstr::CPL => {
@@ -490,23 +507,26 @@ impl CPU {
                 self.registers[Register::A] = !self.registers[Register::A]
             },
             MicroInstr::LDSPHL => self.sp = self.registers.get_hl(),
-            MicroInstr::RETI => self.pc = ((self.tick_state.as_ref().unwrap().b16 as u16) << 8) | (self.tick_state.as_ref().unwrap().b8 as u16), // TODO!
+            MicroInstr::RETI => {
+                self.pc = ((state.b16 as u16) << 8) | (state.b8 as u16);
+                self.should_enable_ime = true;
+            },
             MicroInstr::RST(addr) => self.pc = addr,
             MicroInstr::INCSP => self.sp = self.sp.wrapping_add(1),
             MicroInstr::DECSP => self.sp = self.sp.wrapping_sub(1),
             MicroInstr::ADDSPN => {
                 self.registers.set_flag(Flag::Z, false);
                 self.registers.set_flag(Flag::N, false);
-                self.registers.set_flag(Flag::H, (self.sp & 0x0F).wrapping_add_signed((self.tick_state.as_ref().unwrap().b8 as i8 as i16) & 0x0F) > 0x0F);
-                self.registers.set_flag(Flag::C, (self.sp & 0xFF).wrapping_add_signed((self.tick_state.as_ref().unwrap().b8 as i8 as i16) & 0xFF) > 0xFF);
-                self.sp = self.sp.wrapping_add_signed(self.tick_state.as_ref().unwrap().b8 as i8 as i16);
+                self.registers.set_flag(Flag::H, (self.sp & 0x0F).wrapping_add_signed((state.b8 as i8 as i16) & 0x0F) > 0x0F);
+                self.registers.set_flag(Flag::C, (self.sp & 0xFF).wrapping_add_signed((state.b8 as i8 as i16) & 0xFF) > 0xFF);
+                self.sp = self.sp.wrapping_add_signed(state.b8 as i8 as i16);
             },
             MicroInstr::LDHLSPN => {
                 self.registers.set_flag(Flag::Z, false);
                 self.registers.set_flag(Flag::N, false);
-                self.registers.set_flag(Flag::H, (((self.sp & 0x0F) as u8) + (self.tick_state.as_ref().unwrap().b8 & 0x0F)) > 0x0F);
-                self.registers.set_flag(Flag::C, ((self.sp & 0xFF) + (self.tick_state.as_ref().unwrap().b8 as u16)) > 0xFF);
-                self.registers.set_hl(self.sp.wrapping_add_signed(self.tick_state.as_ref().unwrap().b8 as i8 as i16));
+                self.registers.set_flag(Flag::H, (((self.sp & 0x0F) as u8) + (state.b8 & 0x0F)) > 0x0F);
+                self.registers.set_flag(Flag::C, ((self.sp & 0xFF) + (state.b8 as u16)) > 0xFF);
+                self.registers.set_hl(self.sp.wrapping_add_signed(state.b8 as i8 as i16));
             },
             MicroInstr::DAA => {
                 let mut corr = 0;
@@ -735,10 +755,12 @@ impl CPU {
             MicroInstr::RESHL(pos) => self.bus.write(self.registers.get_hl(), self.bus.read(self.registers.get_hl()) & !(1 << pos)),
             MicroInstr::SET(pos, register) => self.registers[register] |= 1 << pos,
             MicroInstr::SETHL(pos) => self.bus.write(self.registers.get_hl(), self.bus.read(self.registers.get_hl()) | 1 << pos),
+            MicroInstr::EI => self.should_enable_ime = true,
+            MicroInstr::HALT => self.pc -= 1
         }
-        self.tick_state.as_mut().unwrap().step += 1;
+        state.step += 1;
 
-        if self.tick_state.as_ref().unwrap().step >= self.tick_state.as_ref().unwrap().instr.len() {
+        if state.step >= state.instr.len() {
             self.tick_state = None
         };
     }
@@ -760,7 +782,8 @@ impl Default for CPU {
             sp: 0x0,
             pc: 0x0,
             tick_state: None,
-            ime: false
+            ime: false,
+            should_enable_ime: false,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::CPU;
+use crate::{CPU, console_log, log};
 use crate::internal::core::component::{MicroInstr, Byte};
 use crate::internal::core::registers::{Register, Flag};
 
@@ -259,10 +259,15 @@ impl CPU {
             0x07 => vec![MicroInstr::RLCA], // RLCA
             0x17 => vec![MicroInstr::RLA], // RLA
             0x0F => vec![MicroInstr::RRCA], // RRCA
+            0xFB => vec![MicroInstr::EI], // EI
+            0x76 => vec![MicroInstr::HALT], // HALT
 
             0xCB => vec![], // PREFIX
 
-            _ => panic!("Instruction not implemented: 0x{:02X}", opcode)
+            _ => {
+                console_log!("Instruction not implemented: 0x{:02X}", opcode);
+                panic!("Instruction not implemented: 0x{:02X}", opcode)
+            }
         }
     }
 }
