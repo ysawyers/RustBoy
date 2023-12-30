@@ -35,17 +35,24 @@ pub struct PPU {
 struct TickState {
     fetcher_x: usize,
     scanline_x: usize,
-    sprite_fifo: Vec<u8>,
+    sprite_fifo: Vec<Sprite>,
     background_fifo: Vec<u8>,
     sprite_buffer: Vec<u8>,
     tile_number: u8,
     tile_data_low: u8,
     tile_data_high: u8,
+    current_sprite: Option<[u8; 4]>,
     new_scanline: bool,
     fetching_sprite: bool,
 
     oam_ptr: usize,
-    fetcher_step: u8,
+    bg_fetcher_step: u8,
+    sprite_fetcher_step: u8
+}
+
+struct Sprite {
+    value: u8,
+    flags: u8
 }
 
 impl PPU {
@@ -69,6 +76,21 @@ impl PPU {
         };
     }
 
+    fn is_window_in_view(&self) -> bool {
+        true
+    }
+
+    fn detect_sprite(&mut self) -> Option<[u8; 4]> {
+        let objects = self.tick_state.sprite_buffer.len() / 4;
+        for i in 0..objects {
+            let base_ptr = i * 4;
+            if self.tick_state.sprite_buffer[base_ptr + 1] <= self.tick_state.scanline_x as u8 + 8 {
+                return Some([self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr)]);
+            }
+        }
+        return None
+    }
+
     pub fn read_vram(&self, addr: u16) -> u8 {
         self.vram[addr as usize]
     }
@@ -85,16 +107,43 @@ impl PPU {
         self.oam[addr as usize] = val;
     }
 
-    fn is_window_in_view(&self) -> bool {
-        true
-    }
-
     pub fn sprite_pixel_fetcher(&mut self) {
-        
+        if self.tick_state.current_sprite.is_none() { self.tick_state.current_sprite = self.detect_sprite() }
+
+        if !self.tick_state.current_sprite.is_none() {
+            if self.tick_state.sprite_fetcher_step < 1 {
+                self.tick_state.fetching_sprite = true;
+                self.tick_state.sprite_fetcher_step += 1;
+            } else if self.tick_state.sprite_fetcher_step < 2 {
+                let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+                let tile: u16 = 0x8000 + (self.tick_state.current_sprite.unwrap()[2] as u16 * 16);
+                self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
+                self.tick_state.sprite_fetcher_step += 1;
+            } else if self.tick_state.sprite_fetcher_step < 3 {
+                let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+                let tile: u16 = 0x8000 + (self.tick_state.current_sprite.unwrap()[2] as u16 * 16);
+                self.tick_state.tile_data_high = self.vram[((tile + offset + 1) - 0x8000) as usize];
+                self.tick_state.sprite_fetcher_step += 1;
+            } else {
+                let base = (if self.tick_state.current_sprite.unwrap()[1] < 8 { 8 - self.tick_state.current_sprite.unwrap()[1] } else { 0 }) + (self.tick_state.sprite_fifo.len() as u8);
+                for i in base..8 {
+                    self.tick_state.sprite_fifo.push(Sprite{
+                        value: (((self.tick_state.tile_data_high >> (7 - i)) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (7 - i)) & 0x1),
+                        flags: self.tick_state.current_sprite.unwrap()[3]
+                    });
+                }
+
+                // check if another sprite can be fetched, and if not re-enable pixel transfer
+                self.tick_state.current_sprite = self.detect_sprite();
+                if self.tick_state.current_sprite.is_none() {
+                    self.tick_state.fetching_sprite = false;
+                }
+            }
+        }
     }
 
     pub fn background_pixel_fetcher(&mut self) {
-        if self.tick_state.fetcher_step < 1 {
+        if self.tick_state.bg_fetcher_step < 1 {
             let mut tile_map: u16 = 0x9800;
             let mut tile_x: u16 = 0;
             let mut tile_y: u16 = 0;
@@ -111,8 +160,8 @@ impl PPU {
             }
 
             self.tick_state.tile_number = self.vram[((tile_map + ((tile_x + tile_y) & 0x3FF)) - 0x8000) as usize];
-            self.tick_state.fetcher_step += 1;
-        } else if self.tick_state.fetcher_step < 2 {
+            self.tick_state.bg_fetcher_step += 1;
+        } else if self.tick_state.bg_fetcher_step < 2 {
             let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
             let mut tile: u16 = 0;
 
@@ -123,8 +172,8 @@ impl PPU {
             }
 
             self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
-            self.tick_state.fetcher_step += 1;
-        } else if self.tick_state.fetcher_step < 3 {
+            self.tick_state.bg_fetcher_step += 1;
+        } else if self.tick_state.bg_fetcher_step < 3 {
             let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
             let mut tile: u16 = 0;
 
@@ -135,16 +184,16 @@ impl PPU {
             }
 
             self.tick_state.tile_data_high = self.vram[((tile + offset + 1) - 0x8000) as usize];
-            self.tick_state.fetcher_step += 1;
+            self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.new_scanline {
             self.tick_state.new_scanline = false;
-            self.tick_state.fetcher_step = 0;
+            self.tick_state.bg_fetcher_step = 0;
         } else {
             if self.tick_state.background_fifo.len() <= 8 {
                 for i in 0..8 {
                     self.tick_state.background_fifo.push((((self.tick_state.tile_data_high >> (7 - i)) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (7 - i)) & 0x1));
                 }
-                self.tick_state.fetcher_step = 0;
+                self.tick_state.bg_fetcher_step = 0;
             }
             self.tick_state.fetcher_x += 1;
         }
@@ -184,13 +233,30 @@ impl PPU {
                 }
             },
             Mode::DRAW => {
-                if (self.control >> BG_OR_WINDOW_ENABLED) & 0x1 == 0 { self.background_pixel_fetcher() }
+                if (self.control >> BG_OR_WINDOW_ENABLED) & 0x1 == 1 {
+                    if !self.tick_state.fetching_sprite || !self.tick_state.bg_fetcher_step == 0 { // don't continue to next tile if currently fetching sprite
+                        self.background_pixel_fetcher()
+                    }
+                }
                 if (self.control >> SPRITES_ENABLED) & 0x1 == 1 { self.sprite_pixel_fetcher() }
 
-                if !self.tick_state.fetching_sprite {
+                if !self.tick_state.fetching_sprite { // temporarily pause lcd pushing while sprites are being fetched
                     for _ in 0..2 { // draws 1 pixel per dot
                         if self.tick_state.background_fifo.len() > 0 {
-                            self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = self.tick_state.background_fifo.remove(0);
+                            if self.tick_state.sprite_fifo.len() > 0 {
+                                let sprite = self.tick_state.sprite_fifo.remove(0);
+                                let bg = self.tick_state.background_fifo.remove(0);
+
+                                if sprite.value == 0 {
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg;
+                                } else if (sprite.flags >> 7) & 0x1 == 1 {
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg;
+                                } else {
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = sprite.value;
+                                }
+                            } else {
+                                self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = self.tick_state.background_fifo.remove(0);
+                            }
                             self.tick_state.scanline_x += 1;
                         }
     
@@ -265,14 +331,16 @@ impl Default for TickState {
             sprite_buffer: vec![],
             fetcher_x: 0,
             scanline_x: 0,
-            fetcher_step: 0,
+            bg_fetcher_step: 0,
+            sprite_fetcher_step: 0,
             tile_data_high: 0,
             tile_data_low: 0,
             tile_number: 0,
             background_fifo: vec![],
             sprite_fifo: vec![],
             new_scanline: true,
-            fetching_sprite: false
+            fetching_sprite: false,
+            current_sprite: None
         }
     }
 }

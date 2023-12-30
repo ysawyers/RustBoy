@@ -5,7 +5,7 @@ use crate::internal::ppu::component::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
 
-const CYCLES_PER_FRAME: u32 = 69905;
+const CYCLES_PER_FRAME: u32 = 17556;
 
 pub struct CPU {
     pub registers: Registers,
