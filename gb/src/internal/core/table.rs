@@ -1,4 +1,5 @@
-use crate::{CPU, console_log, log};
+use crate::{CPU};
+use crate::{console_log, log};
 use crate::internal::core::component::{MicroInstr, Byte};
 use crate::internal::core::registers::{Register, Flag};
 
@@ -261,6 +262,7 @@ impl CPU {
             0x0F => vec![MicroInstr::RRCA], // RRCA
             0xFB => vec![MicroInstr::EI], // EI
             0x76 => vec![MicroInstr::HALT], // HALT
+            0x10 => vec![MicroInstr::STOP], // STOP
 
             0xCB => vec![], // PREFIX
 

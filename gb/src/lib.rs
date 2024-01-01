@@ -3,6 +3,8 @@ use crate::internal::core::component::CPU;
 
 mod internal;
 
+const CYCLES_PER_FRAME: usize = 17556;
+
 #[wasm_bindgen]
 extern "C" {
     // Use `js_namespace` here to bind `console.log(..)` instead of just
@@ -50,6 +52,6 @@ impl Emulator {
     }
 
     pub fn render(&mut self) -> Vec<u8> {
-        return self.core.next_frame().to_vec();
+        return self.core.next_frame(CYCLES_PER_FRAME).to_vec();
     }
 }

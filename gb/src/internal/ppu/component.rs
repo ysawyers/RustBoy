@@ -1,4 +1,4 @@
-use crate::{log, console_log};
+// use crate::{log, console_log};
 
 const LCD_ENABLED: u8 = 7;
 const WINDOW_TILE_MAP: u8 = 6;
@@ -9,6 +9,7 @@ const SPRITE_SIZE: u8 = 2;
 const SPRITES_ENABLED: u8 = 1;
 const BG_OR_WINDOW_ENABLED: u8 = 0;
 
+#[derive(PartialEq)]
 enum Mode {
     OAMSCAN, DRAW, HBLANK, VBLANK
 }
@@ -25,11 +26,13 @@ pub struct PPU {
     pub scx: u8,
     pub wy: u8,
     pub wx: u8,
+    pub mode_changed: bool,
     vram: [u8; 0x2000],
     oam: [u8; 0xA0],
     scanline_timeline: usize,
     vblank_timeline: usize,
     tick_state: TickState,
+    window_line_counter: u8,
 }
 
 struct TickState {
@@ -44,6 +47,7 @@ struct TickState {
     current_sprite: Option<[u8; 4]>,
     new_scanline: bool,
     fetching_sprite: bool,
+    window_on_scanline: bool,
 
     oam_ptr: usize,
     bg_fetcher_step: u8,
@@ -62,7 +66,10 @@ impl PPU {
             1 => Mode::VBLANK,
             2 => Mode::OAMSCAN,
             3 => Mode::DRAW,
-            _ => panic!("Unexpected branch.")
+            _ => {
+                // console_log!("BRUH");
+                panic!("Unexpected branch.")
+            }
         }
     }
 
@@ -74,11 +81,10 @@ impl PPU {
             Mode::HBLANK => self.stat |= 0b00000000,
             Mode::VBLANK => self.stat |= 0b00000001,
         };
+        self.mode_changed = true;
     }
 
-    fn is_window_in_view(&self) -> bool {
-        true
-    }
+    fn is_window_in_view(&self) -> bool { (self.control >> WINDOW_ENABLED) & 0x1 == 1 && self.tick_state.scanline_x as u8 >= self.wx - 7 && self.tick_state.window_on_scanline }
 
     fn detect_sprite(&mut self) -> Option<[u8; 4]> {
         let objects = self.tick_state.sprite_buffer.len() / 4;
@@ -92,19 +98,29 @@ impl PPU {
     }
 
     pub fn read_vram(&self, addr: u16) -> u8 {
-        self.vram[addr as usize]
+        if self.get_mode() != Mode::DRAW {
+            return self.vram[addr as usize];
+        }
+        return 0xFF;
     }
     
     pub fn write_vram(&mut self, addr: u16, val: u8) {
-        self.vram[addr as usize] = val;
+        if self.get_mode() != Mode::DRAW {
+            self.vram[addr as usize] = val;
+        }
     }
 
     pub fn read_oam(&self, addr: u16) -> u8 {
-        self.oam[addr as usize]
+        if self.get_mode() != Mode::DRAW && self.get_mode() != Mode::OAMSCAN {
+            return self.oam[addr as usize];
+        }
+        return 0xFF;
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
-        self.oam[addr as usize] = val;
+        if self.get_mode() != Mode::DRAW && self.get_mode() != Mode::OAMSCAN {
+            self.oam[addr as usize] = val;
+        }
     }
 
     pub fn sprite_pixel_fetcher(&mut self) {
@@ -143,14 +159,26 @@ impl PPU {
     }
 
     pub fn background_pixel_fetcher(&mut self) {
+        if (self.control >> BG_OR_WINDOW_ENABLED) & 0x1 == 0 { // clear background with white pixels, sprites unaffected.
+            if self.tick_state.background_fifo.len() <= 8 {
+                for _ in 0..8 {
+                    self.tick_state.background_fifo.push(0);
+                }
+            }
+            return
+        }
+
         if self.tick_state.bg_fetcher_step < 1 {
             let mut tile_map: u16 = 0x9800;
             let mut tile_x: u16 = 0;
             let mut tile_y: u16 = 0;
 
             if self.is_window_in_view() && (self.control >> WINDOW_ENABLED) & 0x1 == 1 {
-                console_log!("WINDOW IN VIEW");
-                panic!("IMPLEMEMENT WINDOW RENDERING STEP 1");
+                if (self.control >> WINDOW_TILE_MAP) & 0x1 == 1 {
+                    tile_map = 0x9C00;
+                }
+                tile_x = (self.tick_state.fetcher_x as u16 + ((self.wx as u16) / 8)) & 0x1F;
+                tile_y = 32 * ((self.window_line_counter as u16) / 8)
             } else {
                 if (self.control >> BG_TILE_MAP) & 0x1 == 1 {
                     tile_map = 0x9C00;
@@ -162,8 +190,12 @@ impl PPU {
             self.tick_state.tile_number = self.vram[((tile_map + ((tile_x + tile_y) & 0x3FF)) - 0x8000) as usize];
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 2 {
-            let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+            let mut offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
             let mut tile: u16 = 0;
+
+            if self.is_window_in_view() && (self.control >> WINDOW_ENABLED) & 0x1 == 1 {
+                offset = 2 * ((self.window_line_counter as u16) % 8)
+            }
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
                 tile = 0x8000 + (self.tick_state.tile_number as u16 * 16)
@@ -174,8 +206,12 @@ impl PPU {
             self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 3 {
-            let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+            let mut offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
             let mut tile: u16 = 0;
+
+            if self.is_window_in_view() && (self.control >> WINDOW_ENABLED) & 0x1 == 1 {
+                offset = 2 * ((self.window_line_counter as u16) % 8)
+            }
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
                 tile = 0x8000 + (self.tick_state.tile_number as u16 * 16)
@@ -201,6 +237,10 @@ impl PPU {
 
     fn tick(&mut self) { // 2 dots
         self.scanline_timeline += 2;
+
+        if self.wy == self.ly {
+            self.tick_state.window_on_scanline = true;
+        }
 
         match self.get_mode() {
             Mode::OAMSCAN => {
@@ -233,15 +273,21 @@ impl PPU {
                 }
             },
             Mode::DRAW => {
-                if (self.control >> BG_OR_WINDOW_ENABLED) & 0x1 == 1 {
-                    if !self.tick_state.fetching_sprite || !self.tick_state.bg_fetcher_step == 0 { // don't continue to next tile if currently fetching sprite
-                        self.background_pixel_fetcher()
-                    }
+                if !self.tick_state.fetching_sprite || !self.tick_state.bg_fetcher_step == 0 { // don't continue to next tile if currently fetching sprite
+                    self.background_pixel_fetcher()
                 }
                 if (self.control >> SPRITES_ENABLED) & 0x1 == 1 { self.sprite_pixel_fetcher() }
 
                 if !self.tick_state.fetching_sprite { // temporarily pause lcd pushing while sprites are being fetched
                     for _ in 0..2 { // draws 1 pixel per dot
+                        if self.tick_state.scanline_x == 0 { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD
+                            for _ in 0..(self.scx % 8) {
+                                if self.tick_state.background_fifo.len() > 0 {
+                                    self.tick_state.background_fifo.remove(0);
+                                }
+                            }
+                        }
+
                         if self.tick_state.background_fifo.len() > 0 {
                             if self.tick_state.sprite_fifo.len() > 0 {
                                 let sprite = self.tick_state.sprite_fifo.remove(0);
@@ -258,8 +304,15 @@ impl PPU {
                                 self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = self.tick_state.background_fifo.remove(0);
                             }
                             self.tick_state.scanline_x += 1;
+                        
+                            if self.is_window_in_view() {
+                                self.tick_state.bg_fetcher_step = 0;
+                                self.tick_state.fetcher_x = 0;
+                                self.tick_state.background_fifo = vec![];
+                                break
+                            }
                         }
-    
+
                         if self.tick_state.scanline_x > 159 { // end of scanline
                             self.update_mode(Mode::HBLANK);
                             break
@@ -268,10 +321,15 @@ impl PPU {
                 }
             },
             Mode::HBLANK => {
+                if self.tick_state.window_on_scanline {
+                    self.window_line_counter += 1;
+                }
                 self.tick_state = TickState::default();
+
                 if self.scanline_timeline == 456 { // 456 dots per scanline
                     self.ly += 1;
                     if self.ly > 143 {
+                        self.window_line_counter = 0;
                         self.update_mode(Mode::VBLANK);
                     } else {
                         self.update_mode(Mode::OAMSCAN);
@@ -319,7 +377,9 @@ impl Default for PPU {
             wx: 0,
             tick_state: TickState::default(),
             scanline_timeline: 0,
-            vblank_timeline: 0
+            vblank_timeline: 0,
+            mode_changed: false,
+            window_line_counter: 0
         }
     }
 }
@@ -340,7 +400,8 @@ impl Default for TickState {
             sprite_fifo: vec![],
             new_scanline: true,
             fetching_sprite: false,
-            current_sprite: None
+            current_sprite: None,
+            window_on_scanline: false
         }
     }
 }
