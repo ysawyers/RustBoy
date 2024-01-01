@@ -1,4 +1,4 @@
-use crate::{console_log, log};
+// use crate::{console_log, log};
 use crate::internal::ppu::component::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
@@ -154,6 +154,7 @@ pub enum Byte {
 impl CPU {
     fn fetch_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
+
         if !self.halt_bug {
             self.pc += 1;
         } else {
@@ -165,7 +166,12 @@ impl CPU {
 
     fn fetch_prefix_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
-        self.pc += 1;
+        
+        if !self.halt_bug {
+            self.pc += 1;
+        } else {
+            self.halt_bug = false;
+        }
 
         (opcode, self.decode_prefix_instr(opcode))
     }
@@ -771,7 +777,7 @@ impl CPU {
             MicroInstr::EI => self.should_enable_ime = true,
             MicroInstr::HALT => self.is_halted = true,
             MicroInstr::STOP => {
-                console_log!("ENCOUNTERED STOP!");
+                println!("ENCOUNTERED STOP!");
                 panic!("NOT IMPLEMENTED!");
             }
         }
@@ -780,6 +786,8 @@ impl CPU {
         } else {
             if self.ime && ((self.bus.inte & self.bus.intf) != 0) {
                 self.is_halted = false;
+                self.halt_bug = true;
+                state.step += 1;
             }
 
             // if interrupts not set and interrupt has been requested (that can be serviced) HALT BUG
@@ -827,7 +835,7 @@ impl CPU {
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() }
             self.bus.update_components();
             self.bus.update_requested_interrupts();
-            if self.ime { // if interrupts are enabled
+            if self.ime && self.tick_state.is_none() { // if interrupts are enabled
                 if (self.bus.inte & self.bus.intf) != 0 { // an interrupt has been requested and can potentially be handled
                     for i in 0..5 { // handles interrupts based on their priority
                         if (self.bus.intf >> i) & 0x1 == 1 && (self.bus.inte >> i) & 0x1 == 1 { // interrupt has been requested and allowed by IE
@@ -872,96 +880,56 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    // #[test]
-    // fn blargg_cpu_tests() {
-    //     let files = fs::read_dir("./tests/blargg/logs").unwrap();
-
-    //     for file in files {
-    //         let mut core = CPU::default();
-
-    //         let file_name = file.as_ref().unwrap().file_name();
-    //         let file_name_parts: Vec<_> = file_name.to_str().unwrap().split(".").collect();
-
-    //         let bytes = fs::read(String::from("./tests/blargg/roms/") + file_name_parts[0] + ".gb").expect("File not found!");
-    //         core.bus.load_cartridge(bytes);
-    //         core.bus.debug = true;
-
-    //         core.pc = 0x100;
-    //         core.sp = 0xFFFE;
-            
-    //         core.registers[Register::A] = 0x01;
-    //         core.registers[Register::F] = 0xB0;
-    //         core.registers[Register::B] = 0x00;
-    //         core.registers[Register::C] = 0x13;
-    //         core.registers[Register::D] = 0x00;
-    //         core.registers[Register::E] = 0xD8;
-    //         core.registers[Register::H] = 0x01;
-    //         core.registers[Register::L] = 0x4D;
-
-    //         let body = fs::read_to_string(String::from("./tests/blargg/logs/") + file_name.to_str().unwrap()).expect(file_name.to_str().unwrap());
-
-    //         let mut prev = core.bus.read(core.pc);
-    //         let mut lines = 0;
-
-    //         for line in body.lines() {
-    //             let core_state = format!(
-    //                 "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
-    //                 core.registers[Register::A], core.registers[Register::F], core.registers[Register::B], core.registers[Register::C], core.registers[Register::D], 
-    //                 core.registers[Register::E], core.registers[Register::H], core.registers[Register::L], core.sp, core.pc, 
-    //                 core.bus.read(core.pc), core.bus.read(core.pc+1), core.bus.read(core.pc+2), core.bus.read(core.pc+3)
-    //             );
-    //             lines += 1;
-
-    //             assert_eq!(core_state, line, "PROBLEM WITH OPCODE 0x{:02X} LINE: {}", prev, lines);
-
-    //             prev = core.bus.read(core.pc);
-
-    //             core.execute();
-    //             while !core.tick_state.is_none() {
-    //                 core.execute();
-    //             } 
-    //         }
-
-    //     }
-    // }
-
     #[test]
-    fn blargg_interrupts_test() {
-        let mut core = CPU::default();
-        let bytes = fs::read("tests/interrupts/interrupt.gb").expect("File not found!");
-        core.bus.load_cartridge(bytes);
-        core.bus.debug = true;
+    fn blargg_cpu_tests() {
+        let files = fs::read_dir("./tests/blargg/logs").unwrap();
 
-        core.pc = 0x100;
-        core.sp = 0xFFFE;
-                
-        core.registers[Register::A] = 0x01;
-        core.registers[Register::F] = 0xB0;
-        core.registers[Register::B] = 0x00;
-        core.registers[Register::C] = 0x13;
-        core.registers[Register::D] = 0x00;
-        core.registers[Register::E] = 0xD8;
-        core.registers[Register::H] = 0x01;
-        core.registers[Register::L] = 0x4D;
+        for file in files {
+            let mut core = CPU::default();
 
-        let body = fs::read_to_string("tests/interrupts/log.txt").expect("File not found!");
-        let mut lines = 0;
-        for line in body.lines() {
-            core.next_frame(1);
-            while !core.tick_state.is_none() || !core.interrupt_tick_state.is_none() {
-                core.next_frame(1);
+            let file_name = file.as_ref().unwrap().file_name();
+            let file_name_parts: Vec<_> = file_name.to_str().unwrap().split(".").collect();
+
+            let bytes = fs::read(String::from("./tests/blargg/roms/") + file_name_parts[0] + ".gb").expect("File not found!");
+            core.bus.load_cartridge(bytes);
+            core.bus.debug = true;
+
+            core.pc = 0x100;
+            core.sp = 0xFFFE;
+            
+            core.registers[Register::A] = 0x01;
+            core.registers[Register::F] = 0xB0;
+            core.registers[Register::B] = 0x00;
+            core.registers[Register::C] = 0x13;
+            core.registers[Register::D] = 0x00;
+            core.registers[Register::E] = 0xD8;
+            core.registers[Register::H] = 0x01;
+            core.registers[Register::L] = 0x4D;
+
+            let body = fs::read_to_string(String::from("./tests/blargg/logs/") + file_name.to_str().unwrap()).expect(file_name.to_str().unwrap());
+
+            let mut prev = core.bus.read(core.pc);
+            let mut lines = 0;
+
+            for line in body.lines() {
+                let core_state = format!(
+                    "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+                    core.registers[Register::A], core.registers[Register::F], core.registers[Register::B], core.registers[Register::C], core.registers[Register::D], 
+                    core.registers[Register::E], core.registers[Register::H], core.registers[Register::L], core.sp, core.pc, 
+                    core.bus.read(core.pc), core.bus.read(core.pc+1), core.bus.read(core.pc+2), core.bus.read(core.pc+3)
+                );
+                lines += 1;
+
+                assert_eq!(core_state, line, "PROBLEM WITH OPCODE 0x{:02X} LINE: {}", prev, lines);
+
+                prev = core.bus.read(core.pc);
+
+                core.execute();
+                while !core.tick_state.is_none() {
+                    core.execute();
+                } 
             }
 
-            let core_state = format!(
-                "A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X} SP: {:04X} PC: 00:{:04X} ({:02X} {:02X} {:02X} {:02X})",
-                core.registers[Register::A], core.registers[Register::F], core.registers[Register::B], core.registers[Register::C], core.registers[Register::D], 
-                core.registers[Register::E], core.registers[Register::H], core.registers[Register::L], core.sp, core.pc, 
-                core.bus.read(core.pc), core.bus.read(core.pc+1), core.bus.read(core.pc+2), core.bus.read(core.pc+3)
-            );
-
-            assert_eq!(core_state, line, "PROBLEM WITH LINE: {}", lines);
-
-            lines += 1;
         }
     }
 }

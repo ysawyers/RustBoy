@@ -1,5 +1,5 @@
 use crate::{CPU};
-use crate::{console_log, log};
+//use crate::{console_log, log};
 use crate::internal::core::component::{MicroInstr, Byte};
 use crate::internal::core::registers::{Register, Flag};
 
@@ -267,7 +267,7 @@ impl CPU {
             0xCB => vec![], // PREFIX
 
             _ => {
-                console_log!("Instruction not implemented: 0x{:02X}", opcode);
+                println!("Instruction not implemented: 0x{:02X}", opcode);
                 panic!("Instruction not implemented: 0x{:02X}", opcode)
             }
         }

@@ -10,7 +10,7 @@ const SPRITES_ENABLED: u8 = 1;
 const BG_OR_WINDOW_ENABLED: u8 = 0;
 
 #[derive(PartialEq)]
-enum Mode {
+pub enum Mode {
     OAMSCAN, DRAW, HBLANK, VBLANK
 }
 
@@ -26,7 +26,7 @@ pub struct PPU {
     pub scx: u8,
     pub wy: u8,
     pub wx: u8,
-    pub mode_changed: bool,
+    pub new_mode: Option<Mode>,
     vram: [u8; 0x2000],
     oam: [u8; 0xA0],
     scanline_timeline: usize,
@@ -81,7 +81,7 @@ impl PPU {
             Mode::HBLANK => self.stat |= 0b00000000,
             Mode::VBLANK => self.stat |= 0b00000001,
         };
-        self.mode_changed = true;
+        self.new_mode.get_or_insert(mode);
     }
 
     fn is_window_in_view(&self) -> bool { (self.control >> WINDOW_ENABLED) & 0x1 == 1 && self.tick_state.scanline_x as u8 >= self.wx - 7 && self.tick_state.window_on_scanline }
@@ -378,8 +378,8 @@ impl Default for PPU {
             tick_state: TickState::default(),
             scanline_timeline: 0,
             vblank_timeline: 0,
-            mode_changed: false,
-            window_line_counter: 0
+            window_line_counter: 0,
+            new_mode: None
         }
     }
 }

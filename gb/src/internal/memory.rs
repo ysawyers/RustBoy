@@ -1,6 +1,4 @@
-use crate::{console_log, log};
-use crate::internal::ppu::component::PPU;
-use crate::internal::ppu::component::Display;
+use crate::internal::ppu::component::{PPU, Mode, Display};
 
 const MBC_TYPE: u16 = 0x0147;
 
@@ -10,7 +8,7 @@ pub struct Memory {
 
     memory: [u8; 0x10000],
     boot_rom: [u8; 0x100],
-    boot_rom_mounted: bool,
+    pub boot_rom_mounted: bool,
     catridge_mounted: bool,
 
     // interrupts
@@ -36,7 +34,6 @@ impl Memory {
         for i in 0..bytes.len() {
             self.boot_rom[i] = bytes[i];
         }
-        console_log!("MOUNTED BOOT!");
         self.boot_rom_mounted = true;
     }
 
@@ -68,13 +65,20 @@ impl Memory {
         if addr == 0xFF07 { return self.tac }
         if addr == 0xFF0F { return self.intf }
         if addr == 0xFFFF { return self.inte }
-        
+
+        if addr == 0xFF00 { // JOYPAD
+            return 0xFF
+        }
+
+        if addr >= 0xE000 && addr <= 0xFDFF { return 0xFF } // prohibited
+        if addr >= 0xFEA0 && addr <= 0xFEFF { return 0xFF } // prohibited
+
         self.memory[addr as usize]
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
         if self.catridge_mounted && addr <= 0x7FFF { 
-            // mbc impl goes here!
+            // panic!("AHH WHAT DO I DO HERE???");
         }
 
         if addr >= 0x8000 && addr <= 0x9FFF {
@@ -158,6 +162,9 @@ impl Memory {
             return
         }
 
+        if addr >= 0xE000 && addr <= 0xFDFF { return } // prohibited
+        if addr >= 0xFEA0 && addr <= 0xFEFF { return } // prohibited
+
         self.memory[addr as usize] = val
     }
 
@@ -169,14 +176,17 @@ impl Memory {
             self.tima_overflow = false;
         }
 
-        // if self.ppu.stat & 0x3 == 1 { requests |= 0b00000001 } // VBLANK interrupt
+        if !self.ppu.new_mode.is_none() {
+            match self.ppu.new_mode.as_ref().unwrap() {
+                Mode::HBLANK => requests |= 0b00000010, // STAT interrupt
+                Mode::VBLANK => requests |= 0b00000001, // VBLANK / STAT interrupt
+                Mode::OAMSCAN => requests |= 0b00000010, // STAT interrupt
+                _ => ()
+            }
+            self.ppu.new_mode = None;
+        }
 
-        // if self.ppu.mode_changed { // LCD interrupt
-        //     requests |= 0b00000010;
-        //     self.ppu.mode_changed = false;
-        // }
-
-        // if self.ppu.lyc == self.ppu.ly { requests |= 0b00000010 } // LCD interrupt
+       if self.ppu.ly == self.ppu.lyc { requests |= 0b00000010 } // STAT interrupt
 
         self.intf |= requests;
     }
