@@ -47,7 +47,6 @@ struct TickState {
     tile_data_high: u8,
     current_sprite: Option<[u8; 4]>,
     new_scanline: bool,
-    fetching_sprite: bool,
     lyc_triggered: bool,
     window_in_scanline: bool,
 
@@ -68,10 +67,7 @@ impl PPU {
             1 => Mode::VBLANK,
             2 => Mode::OAMSCAN,
             3 => Mode::DRAW,
-            _ => {
-                console_log!("BRUH");
-                panic!("Unexpected branch.")
-            }
+            _ => panic!("Unexpected branch.")
         }
     }
 
@@ -93,7 +89,11 @@ impl PPU {
         for i in 0..objects {
             let base_ptr = i * 4;
             if self.tick_state.sprite_buffer[base_ptr + 1] <= self.tick_state.scanline_x as u8 + 8 {
-                return Some([self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr), self.tick_state.sprite_buffer.remove(base_ptr)]);
+                let y_pos = self.tick_state.sprite_buffer.remove(base_ptr);
+                let x_pos = self.tick_state.sprite_buffer.remove(base_ptr);
+                let tile_number = self.tick_state.sprite_buffer.remove(base_ptr);
+                let sprite_flags = self.tick_state.sprite_buffer.remove(base_ptr);
+                return Some([y_pos, x_pos, tile_number, sprite_flags]);
             }
         }
         return None
@@ -130,32 +130,29 @@ impl PPU {
 
         if !self.tick_state.current_sprite.is_none() {
             if self.tick_state.sprite_fetcher_step < 1 {
-                self.tick_state.fetching_sprite = true;
+                self.tick_state.tile_number = self.tick_state.current_sprite.unwrap()[2];
+                self.tick_state.bg_fetcher_step = 0;
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 2 {
                 let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
-                let tile: u16 = 0x8000 + (self.tick_state.current_sprite.unwrap()[2] as u16 * 16);
+                let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
                 self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 3 {
                 let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
-                let tile: u16 = 0x8000 + (self.tick_state.current_sprite.unwrap()[2] as u16 * 16);
+                let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
                 self.tick_state.tile_data_high = self.vram[((tile + offset + 1) - 0x8000) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else {
                 let base = (if self.tick_state.current_sprite.unwrap()[1] < 8 { 8 - self.tick_state.current_sprite.unwrap()[1] } else { 0 }) + (self.tick_state.sprite_fifo.len() as u8);
                 for i in base..8 {
                     self.tick_state.sprite_fifo.push(Sprite{
-                        value: (((self.tick_state.tile_data_high >> (7 - i)) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (7 - i)) & 0x1),
+                        value: (((self.tick_state.tile_data_high >> (7 - i)) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (7 - i)) & 0x1), 
                         flags: self.tick_state.current_sprite.unwrap()[3]
                     });
                 }
-
-                // check if another sprite can be fetched, and if not re-enable pixel transfer
                 self.tick_state.current_sprite = self.detect_sprite();
-                if self.tick_state.current_sprite.is_none() {
-                    self.tick_state.fetching_sprite = false;
-                }
+                self.tick_state.sprite_fetcher_step = 0;
             }
         }
     }
@@ -176,14 +173,11 @@ impl PPU {
             let mut tile_y: u16 = 0;
 
             if self.is_window_in_view() {
-                // if (self.control >> WINDOW_TILE_MAP) & 0x1 == 0 {
-                //     tile_map = 0x9C00;
-                // }
-
-                // console_log!("WINDOW X {} FETCHER X {}", self.wx,);
-
-                // tile_x = 0;
-                // tile_y = 32 * ((self.window_line_counter as u16) / 8);
+                if (self.control >> WINDOW_TILE_MAP) & 0x1 == 0 {
+                    tile_map = 0x9C00;
+                }
+                tile_x = (self.tick_state.fetcher_x as u16) + (self.wx as u16);
+                tile_y = 32 * ((self.window_line_counter as u16) / 8);
             } else {
                 if (self.control >> BG_TILE_MAP) & 0x1 == 1 {
                     tile_map = 0x9C00;
@@ -275,12 +269,13 @@ impl PPU {
                 }
             },
             Mode::DRAW => {
-                if !self.tick_state.fetching_sprite || !self.tick_state.bg_fetcher_step == 0 { // don't continue to next tile if currently fetching sprite
-                    self.background_pixel_fetcher()
-                }
                 if (self.control >> SPRITES_ENABLED) & 0x1 == 1 { self.sprite_pixel_fetcher() }
 
-                if !self.tick_state.fetching_sprite { // temporarily pause lcd pushing while sprites are being fetched
+                if self.tick_state.current_sprite.is_none() { // don't continue to next tile if currently fetching sprite
+                    self.background_pixel_fetcher()
+                }
+
+                if self.tick_state.current_sprite.is_none() { // temporarily pause lcd pushing while sprites are being fetched
                     for _ in 0..2 { // draws 1 pixel per dot
                         if self.tick_state.background_fifo.len() > 0 {
                             if self.tick_state.scanline_x == 0 { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD
@@ -404,7 +399,6 @@ impl Default for TickState {
             background_fifo: vec![],
             sprite_fifo: vec![],
             new_scanline: true,
-            fetching_sprite: false,
             current_sprite: None,
             lyc_triggered: false,
             window_in_scanline: false
