@@ -1,4 +1,4 @@
-// use crate::{log, console_log};
+use crate::{log, console_log};
 
 const LCD_ENABLED: u8 = 7;
 const WINDOW_TILE_MAP: u8 = 6;
@@ -28,7 +28,7 @@ pub struct PPU {
     pub wx: u8,
     pub new_mode: Option<Mode>,
     vram: [u8; 0x2000],
-    oam: [u8; 0xA0],
+    pub oam: [u8; 0xA0],
     scanline_timeline: usize,
     vblank_timeline: usize,
     tick_state: TickState,
@@ -67,7 +67,7 @@ impl PPU {
             2 => Mode::OAMSCAN,
             3 => Mode::DRAW,
             _ => {
-                // console_log!("BRUH");
+                console_log!("BRUH");
                 panic!("Unexpected branch.")
             }
         }

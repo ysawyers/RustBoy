@@ -1,4 +1,4 @@
-// use crate::{console_log, log};
+use crate::{console_log, log};
 use crate::internal::ppu::component::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
@@ -777,7 +777,7 @@ impl CPU {
             MicroInstr::EI => self.should_enable_ime = true,
             MicroInstr::HALT => self.is_halted = true,
             MicroInstr::STOP => {
-                println!("ENCOUNTERED STOP!");
+                console_log!("ENCOUNTERED STOP!");
                 panic!("NOT IMPLEMENTED!");
             }
         }
@@ -835,7 +835,7 @@ impl CPU {
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() }
             self.bus.update_components();
             self.bus.update_requested_interrupts();
-            if self.ime && self.tick_state.is_none() { // if interrupts are enabled
+            if self.ime && self.tick_state.is_none() { // if interrupts are enabled between instructions
                 if (self.bus.inte & self.bus.intf) != 0 { // an interrupt has been requested and can potentially be handled
                     for i in 0..5 { // handles interrupts based on their priority
                         if (self.bus.intf >> i) & 0x1 == 1 && (self.bus.inte >> i) & 0x1 == 1 { // interrupt has been requested and allowed by IE
@@ -929,7 +929,10 @@ mod tests {
                     core.execute();
                 } 
             }
-
         }
+    }
+
+    fn sm83_cpu_unit_tests() {
+        // TODO!
     }
 }

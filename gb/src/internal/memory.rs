@@ -1,4 +1,4 @@
-use crate::internal::ppu::component::{PPU, Mode, Display};
+use crate::{internal::ppu::component::{PPU, Mode, Display}, console_log, log};
 
 const MBC_TYPE: u16 = 0x0147;
 
@@ -8,22 +8,16 @@ pub struct Memory {
 
     memory: [u8; 0x10000],
     boot_rom: [u8; 0x100],
-    pub boot_rom_mounted: bool,
+    boot_rom_mounted: bool,
     catridge_mounted: bool,
+    oam_dma: usize, // number of cycles passed
 
     // interrupts
     pub inte: u8,
     pub intf: u8,
 
-    // timers
-    div: u8,
-    tima: u8,
-    tma: u8,
-    old_tma: Option<u8>,
-    tac: u8,
-    cycles_passed_div: usize,
-    cycles_passed_tima: usize,
-    tima_overflow: bool,
+    // joypad
+    joyp: u8,
 
     // components
     ppu: PPU
@@ -44,6 +38,12 @@ impl Memory {
         self.catridge_mounted = true;
     }
 
+    fn oam_dma_transfer(&mut self, source: u16) {
+        for i in 0..0xA0 {
+            self.ppu.oam[i] = self.memory[(source as usize) + i];
+        }
+    }
+
     pub fn read(&self, addr: u16) -> u8 {
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
@@ -59,15 +59,16 @@ impl Memory {
         if addr == 0xFF45 { return self.ppu.lyc }
         if addr == 0xFF4A { return self.ppu.wy }
         if addr == 0xFF4B { return self.ppu.wx }
-        if addr == 0xFF04 { return self.div }
-        if addr == 0xFF05 { return self.tima }
-        if addr == 0xFF06 { return self.tma }
-        if addr == 0xFF07 { return self.tac }
         if addr == 0xFF0F { return self.intf }
         if addr == 0xFFFF { return self.inte }
 
         if addr == 0xFF00 { // JOYPAD
-            return 0xFF
+            if (self.joyp >> 4) & 0x1 == 0 { // DPAD (DIRECTIONS)
+                
+            } else if (self.joyp >> 5) & 0x1 == 0 { // BUTTONS (SELECT)
+                
+            }
+            return 0xF;
         }
 
         if addr >= 0xE000 && addr <= 0xFDFF { return 0xFF } // prohibited
@@ -88,27 +89,6 @@ impl Memory {
 
         if addr >= 0xFE00 && addr <= 0xFE9F {
             self.ppu.write_oam(addr - 0xFE00, val);
-            return
-        }
-
-        if addr == 0xFF04 {
-            self.div = 0;
-            return
-        }
-
-        if addr == 0xFF05 {
-            self.tima = val;
-            return
-        }
-
-        if addr == 0xFF06 {
-            self.old_tma.get_or_insert(self.tma);
-            self.tma = val;
-            return
-        }
-
-        if addr == 0xFF07 {
-            self.tac = val;
             return
         }
 
@@ -162,6 +142,17 @@ impl Memory {
             return
         }
 
+        if addr == 0xFF00 {
+            self.joyp = val;
+            return
+        }
+
+        if addr == 0xFF46 {
+            self.oam_dma = 1;
+            self.oam_dma_transfer((val as u16) << 8);
+            return;
+        }
+
         if addr >= 0xE000 && addr <= 0xFDFF { return } // prohibited
         if addr >= 0xFEA0 && addr <= 0xFEFF { return } // prohibited
 
@@ -171,66 +162,22 @@ impl Memory {
     pub fn update_requested_interrupts(&mut self) { // "IF" register
         let mut requests: u8 = 0x0;
 
-        if self.tima_overflow { // TIMER interrupt
-            requests |= 0b00000100;
-            self.tima_overflow = false;
-        }
-
         if !self.ppu.new_mode.is_none() {
             match self.ppu.new_mode.as_ref().unwrap() {
                 Mode::HBLANK => requests |= 0b00000010, // STAT interrupt
-                Mode::VBLANK => requests |= 0b00000001, // VBLANK / STAT interrupt
+                Mode::VBLANK => requests |= 0b00000011, // VBLANK / STAT interrupt
                 Mode::OAMSCAN => requests |= 0b00000010, // STAT interrupt
                 _ => ()
             }
             self.ppu.new_mode = None;
         }
-
-       if self.ppu.ly == self.ppu.lyc { requests |= 0b00000010 } // STAT interrupt
+        if self.ppu.ly == self.ppu.lyc { requests |= 0b00000010 } // STAT interrupt
 
         self.intf |= requests;
     }
 
-    // return number of cycles needed to increment TIMA
-    fn clock_select(&self, clock: u8) -> usize {
-        match clock {
-            0 => 1024,
-            1 => 16,
-            2 => 64,
-            3 => 256,
-            _ => {
-                panic!("UNEXPECTED!");
-            }
-        }
-    }
-
     pub fn update_components(&mut self) {
-        self.cycles_passed_div += 4;
-        if (self.tac >> 2) & 0x1 == 1 { // TIMA ENABLED
-            self.cycles_passed_tima += 4;
-        }
-
         self.ppu.update();
-
-        if self.cycles_passed_div == 256 {
-            self.div = self.div.wrapping_add(1);
-            self.cycles_passed_div = 0;
-        }
-        
-        if self.cycles_passed_tima == self.clock_select(self.tac & 0x3) { // incremented at clock frequency specified by TAC if TIMA enabled
-            let incr = self.tima.overflowing_add(1);
-            if incr.1 { // if tima overflow reset to value specified by TMA
-                self.tima = if self.old_tma.is_none() { self.tma } else { self.old_tma.unwrap() };
-                self.tima_overflow = true;
-            } else {
-                self.tima = incr.0
-            }
-            self.cycles_passed_tima = 0;
-        }
-        
-        if !self.old_tma.is_none() {
-            self.old_tma = None;
-        }
     }
 
     pub fn get_display(&self) -> Display {
@@ -246,17 +193,11 @@ impl Default for Memory {
             boot_rom: [0x0; 0x100],
             boot_rom_mounted: false,
             catridge_mounted: false,
+            oam_dma: 0,
             ppu: PPU::default(),
-            div: 0,
-            tima: 0,
-            tma: 0,
-            tac: 0x0,
             inte: 0x0,
             intf: 0x0,
-            cycles_passed_div: 0,
-            cycles_passed_tima: 0,
-            old_tma: None,
-            tima_overflow: false
+            joyp: 0x0
         }
     }
 }
