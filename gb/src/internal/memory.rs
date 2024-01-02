@@ -1,6 +1,6 @@
-use crate::{internal::ppu::component::{PPU, Mode, Display}, console_log, log};
+use crate::{internal::ppu::component::{PPU, Mode, Display}};
 
-const MBC_TYPE: u16 = 0x0147;
+// const MBC_TYPE: u16 = 0x0147;
 
 pub struct Memory {
     // testing
@@ -10,7 +10,6 @@ pub struct Memory {
     boot_rom: [u8; 0x100],
     boot_rom_mounted: bool,
     catridge_mounted: bool,
-    oam_dma: usize, // number of cycles passed
 
     // interrupts
     pub inte: u8,
@@ -48,9 +47,10 @@ impl Memory {
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
         }
-        
+
         if addr >= 0x8000 && addr <= 0x9FFF { return self.ppu.read_vram(addr - 0x8000) }
         if addr >= 0xFE00 && addr <= 0xFE9F { return self.ppu.read_oam(addr - 0xFE00) }
+        if addr == 0xFF01 { return 0xFF }
         if addr == 0xFF40 { return self.ppu.control }
         if addr == 0xFF41 { return self.ppu.stat }
         if addr == 0xFF42 { return self.ppu.scy }
@@ -63,9 +63,9 @@ impl Memory {
         if addr == 0xFFFF { return self.inte }
 
         if addr == 0xFF00 { // JOYPAD
-            if (self.joyp >> 4) & 0x1 == 0 { // DPAD (DIRECTIONS)
+            if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
                 
-            } else if (self.joyp >> 5) & 0x1 == 0 { // BUTTONS (SELECT)
+            } else if ((self.joyp >> 5) & 0x1 == 0) && ((self.joyp >> 4) & 0x1 == 1) { // SELECT
                 
             }
             return 0xF;
@@ -148,7 +148,6 @@ impl Memory {
         }
 
         if addr == 0xFF46 {
-            self.oam_dma = 1;
             self.oam_dma_transfer((val as u16) << 8);
             return;
         }
@@ -159,19 +158,24 @@ impl Memory {
         self.memory[addr as usize] = val
     }
 
-    pub fn update_requested_interrupts(&mut self) { // "IF" register
+    pub fn update_requested_interrupts(&mut self) { // MAKE SURE TO ADD THE CONDITION WHERE ONLY 1 STAT INTERRUPT PER SCANLINE!
         let mut requests: u8 = 0x0;
 
+        if ((self.ppu.stat >> 6) & 0x1 == 1) && ((self.ppu.stat >> 2) & 0x1 == 1) { // STAT interrupt
+            self.ppu.stat &= !(1 << 2); // reset ly == lyc bit
+            requests |= 0b00000010;
+        } 
+
         if !self.ppu.new_mode.is_none() {
-            match self.ppu.new_mode.as_ref().unwrap() {
-                Mode::HBLANK => requests |= 0b00000010, // STAT interrupt
-                Mode::VBLANK => requests |= 0b00000011, // VBLANK / STAT interrupt
-                Mode::OAMSCAN => requests |= 0b00000010, // STAT interrupt
-                _ => ()
-            }
+            let new_mode = self.ppu.new_mode.as_ref().unwrap();
+
+            if *new_mode == Mode::VBLANK { requests |= 0b00000001 }; // VBLANK interrupt
+            // if ((self.ppu.stat >> 5) & 0x1 == 1) && (*new_mode == Mode::OAMSCAN) { requests |= 0b00000010 }; // STAT interrupt
+            // if ((self.ppu.stat >> 4) & 0x1 == 1) && (*new_mode == Mode::VBLANK) { requests |= 0b00000010 }; // STAT interrupt
+            // if ((self.ppu.stat >> 3) & 0x1 == 1) && (*new_mode == Mode::HBLANK) { requests |= 0b00000010 }; // STAT interrupt
+
             self.ppu.new_mode = None;
         }
-        if self.ppu.ly == self.ppu.lyc { requests |= 0b00000010 } // STAT interrupt
 
         self.intf |= requests;
     }
@@ -193,7 +197,6 @@ impl Default for Memory {
             boot_rom: [0x0; 0x100],
             boot_rom_mounted: false,
             catridge_mounted: false,
-            oam_dma: 0,
             ppu: PPU::default(),
             inte: 0x0,
             intf: 0x0,
