@@ -18,14 +18,17 @@ pub type Display = [u8; 23040];
 
 pub struct PPU {
     pub lcd: Display,
-    pub ly: u8, // read only
-    pub lyc: u8, // read/write
-    pub control: u8, // read/write
-    pub stat: u8, // read/write
+    pub ly: u8,
+    pub lyc: u8,
+    pub control: u8,
+    pub stat: u8,
     pub scy: u8,
     pub scx: u8,
     pub wy: u8,
     pub wx: u8,
+    pub bgp: u8,
+    pub obp0: u8,
+    pub obp1: u8,
     pub new_mode: Option<Mode>,
     pub oam: [u8; 0xA0],
     vram: [u8; 0x2000],
@@ -56,7 +59,7 @@ struct TickState {
 }
 
 struct Sprite {
-    value: u8,
+    color_id: u8,
     flags: u8
 }
 
@@ -129,25 +132,35 @@ impl PPU {
         if self.tick_state.current_sprite.is_none() { self.tick_state.current_sprite = self.detect_sprite() }
 
         if !self.tick_state.current_sprite.is_none() {
+            let vertical_flip = self.tick_state.current_sprite.unwrap()[3] >> 6 & 0x1 == 1;
+
+            let mut vertical_offset: u16 = self.ly as u16;
+            if vertical_flip {
+                let y_pos = self.tick_state.current_sprite.unwrap()[0] as u16;
+                let sprite_height = (if self.control >> SPRITE_SIZE & 0x1 == 1 { 16 } else { 8 }) as u16;
+                vertical_offset = ((y_pos + sprite_height) - (self.ly as u16)) - 1;
+            }
+
             if self.tick_state.sprite_fetcher_step < 1 {
                 self.tick_state.tile_number = self.tick_state.current_sprite.unwrap()[2];
                 self.tick_state.bg_fetcher_step = 0;
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 2 {
-                let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+                let offset = 2 * ((vertical_offset as u16 + self.scy as u16) % 8);
                 let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
-                self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
+                self.tick_state.tile_data_low = self.vram[(tile + offset - 0x8000) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 3 {
-                let offset = 2 * ((self.ly as u16 + self.scy as u16) % 8);
+                let offset = 2 * ((vertical_offset as u16 + self.scy as u16) % 8);
                 let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
-                self.tick_state.tile_data_high = self.vram[((tile + offset + 1) - 0x8000) as usize];
+                self.tick_state.tile_data_high = self.vram[(tile + offset + 1 - 0x8000) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else {
+                let horizontal_flip = self.tick_state.current_sprite.unwrap()[3] >> 5 & 0x1 == 1;
                 let base = (if self.tick_state.current_sprite.unwrap()[1] < 8 { 8 - self.tick_state.current_sprite.unwrap()[1] } else { 0 }) + (self.tick_state.sprite_fifo.len() as u8);
                 for i in base..8 {
                     self.tick_state.sprite_fifo.push(Sprite{
-                        value: (((self.tick_state.tile_data_high >> (7 - i)) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (7 - i)) & 0x1), 
+                        color_id: (((self.tick_state.tile_data_high >> (if horizontal_flip { i } else { 7 - i })) & 0x1) << 1) | ((self.tick_state.tile_data_low >> (if horizontal_flip { i } else { 7 - i })) & 0x1), 
                         flags: self.tick_state.current_sprite.unwrap()[3]
                     });
                 }
@@ -169,13 +182,14 @@ impl PPU {
 
         if self.tick_state.bg_fetcher_step < 1 {
             let mut tile_map: u16 = 0x9800;
-            let mut tile_x: u16 = 0;
-            let mut tile_y: u16 = 0;
+            let tile_x;
+            let tile_y;
 
             if self.is_window_in_view() {
                 if (self.control >> WINDOW_TILE_MAP) & 0x1 == 0 {
                     tile_map = 0x9C00;
                 }
+                // TODO!
                 tile_x = (self.tick_state.fetcher_x as u16) + (self.wx as u16);
                 tile_y = 32 * ((self.window_line_counter as u16) / 8);
             } else {
@@ -190,19 +204,19 @@ impl PPU {
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 2 {
             let offset = if self.is_window_in_view() { 2 * ((self.window_line_counter as u16) % 8) } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
-            let mut tile: u16 = 0;
+            let tile;
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
-                    tile = 0x8000 + (self.tick_state.tile_number as u16 * 16)
-                } else {
-                    tile = (0x9000 as u16).wrapping_add_signed((self.tick_state.tile_number as i8 as i16) * 16);
-                }
-            
+                tile = 0x8000 + (self.tick_state.tile_number as u16 * 16)
+            } else {
+                tile = (0x9000 as u16).wrapping_add_signed((self.tick_state.tile_number as i8 as i16) * 16);
+            }
+
             self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 3 {
             let offset = if self.is_window_in_view() { 2 * ((self.window_line_counter as u16) % 8) } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
-            let mut tile: u16 = 0;
+            let tile;
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
                 tile = 0x8000 + (self.tick_state.tile_number as u16 * 16)
@@ -226,6 +240,15 @@ impl PPU {
         }
     }
 
+    fn get_object_color(&self, pallete: u8, color_id: u8) -> u8 {
+        if pallete == 1 {
+            return (self.obp1 >> (2 * color_id)) & 0x3
+        } else if pallete == 0 {
+            return (self.obp0 >> (2 * color_id)) & 0x3
+        }
+        panic!("invalid pallete number!");
+    }
+
     fn tick(&mut self) { // 2 dots
         self.scanline_timeline += 2;
 
@@ -245,11 +268,12 @@ impl PPU {
 
                     let y_pos = self.oam[base_ptr];
                     let x_pos = self.oam[base_ptr + 1];
-                    let tile_number = self.oam[base_ptr + 2];
+                    let mut tile_number = self.oam[base_ptr + 2];
                     let sprite_flags = self.oam[base_ptr + 3];
 
                     let mut sprite_height: u8 = 8;
                     if (self.control >> SPRITE_SIZE) & 0x1 == 1 {
+                        tile_number &= 0b11111110; // bit 0 of tile index for 8x16 objects should be ignored
                         sprite_height = 16;
                     }
 
@@ -286,14 +310,17 @@ impl PPU {
 
                             if self.tick_state.sprite_fifo.len() > 0 {
                                 let sprite = self.tick_state.sprite_fifo.remove(0);
-                                let bg = self.tick_state.background_fifo.remove(0);
-                                
-                                if sprite.value == 0 {
-                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg;
-                                } else if (sprite.flags >> 7) & 0x1 == 1 && bg != 0 {
-                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg;
-                                } else {
-                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = sprite.value;
+                                let sprite_color_value = self.get_object_color((sprite.flags >> 4) & 0x1, sprite.color_id);
+
+                                let bg_color_id = self.tick_state.background_fifo.remove(0);
+                                let bg_color_value = (self.bgp >> (bg_color_id * 2)) & 0x3;
+
+                                if sprite_color_value == 0 { // sprite is transparent so background is visible
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
+                                } else if (sprite.flags >> 7) & 0x1 == 1 && bg_color_value != 0 { // background has priority and isn't transparent
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
+                                } else { // otherwise just default to showing the sprite
+                                    self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = sprite_color_value;
                                 }
                             } else {
                                 self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = self.tick_state.background_fifo.remove(0);
@@ -308,7 +335,7 @@ impl PPU {
                                 self.tick_state.fetcher_x = 0;
                                 self.tick_state.background_fifo = vec![];
                                 break
-                            }
+                            }   
                         }
 
                         if self.tick_state.scanline_x > 159 { // end of scanline
@@ -374,6 +401,9 @@ impl Default for PPU {
             scx: 0,
             wy: 0,
             wx: 0,
+            bgp: 0x0,
+            obp0: 0,
+            obp1: 0,
             tick_state: TickState::default(),
             scanline_timeline: 0,
             vblank_timeline: 0,

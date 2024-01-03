@@ -61,6 +61,9 @@ impl Memory {
         if addr == 0xFF4B { return self.ppu.wx }
         if addr == 0xFF0F { return self.intf }
         if addr == 0xFFFF { return self.inte }
+        if addr == 0xFF47 { return self.ppu.bgp }
+        if addr == 0xFF48 { return self.ppu.obp0 }
+        if addr == 0xFF49 { return self.ppu.obp1 }
 
         if addr == 0xFF00 { // JOYPAD
             if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
@@ -150,6 +153,21 @@ impl Memory {
         if addr == 0xFF46 {
             self.oam_dma_transfer((val as u16) << 8);
             return;
+        }
+
+        if addr == 0xFF47 { 
+            self.ppu.bgp = val;
+            return
+        }
+
+        if addr == 0xFF48 {
+            self.ppu.obp0 = val;
+            return
+        }
+
+        if addr == 0xFF49 {
+            self.ppu.obp1 = val;
+            return
         }
 
         if addr >= 0xE000 && addr <= 0xFDFF { return } // prohibited
