@@ -308,12 +308,12 @@ impl PPU {
                                 }
                             }
 
+                            let bg_color_id = self.tick_state.background_fifo.remove(0);
+                            let bg_color_value = (self.bgp >> (bg_color_id * 2)) & 0x3;
+
                             if self.tick_state.sprite_fifo.len() > 0 {
                                 let sprite = self.tick_state.sprite_fifo.remove(0);
-                                let sprite_color_value = self.get_object_color((sprite.flags >> 4) & 0x1, sprite.color_id);
-
-                                let bg_color_id = self.tick_state.background_fifo.remove(0);
-                                let bg_color_value = (self.bgp >> (bg_color_id * 2)) & 0x3;
+                                let sprite_color_value = self.get_object_color((sprite.flags >> 4) & 0x1, sprite.color_id);    
 
                                 if sprite_color_value == 0 { // sprite is transparent so background is visible
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
@@ -323,7 +323,7 @@ impl PPU {
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = sprite_color_value;
                                 }
                             } else {
-                                self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = self.tick_state.background_fifo.remove(0);
+                                self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
                             }
 
                             self.tick_state.scanline_x += 1;
