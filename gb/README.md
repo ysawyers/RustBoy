@@ -4,7 +4,5 @@
 
 # TODO
 
-- Joystick
-- Windowing
 - Memory banking
 - Implement timer interrupts

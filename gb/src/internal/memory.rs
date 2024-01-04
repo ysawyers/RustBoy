@@ -19,6 +19,9 @@ pub struct Memory {
     pub keypress: i8,
     joyp: u8,
 
+    // timers
+    pub div: u16,
+
     // components
     ppu: PPU
 }
@@ -52,6 +55,7 @@ impl Memory {
         if addr >= 0x8000 && addr <= 0x9FFF { return self.ppu.read_vram(addr - 0x8000) }
         if addr >= 0xFE00 && addr <= 0xFE9F { return self.ppu.read_oam(addr - 0xFE00) }
         if addr == 0xFF01 { return 0xFF }
+        if addr == 0xFF04 { return (self.div >> 8) as u8 }
         if addr == 0xFF40 { return self.ppu.control }
         if addr == 0xFF41 { return self.ppu.stat }
         if addr == 0xFF42 { return self.ppu.scy }
@@ -111,6 +115,11 @@ impl Memory {
 
         if addr >= 0xFE00 && addr <= 0xFE9F {
             self.ppu.write_oam(addr - 0xFE00, val);
+            return
+        }
+
+        if addr == 0xFF04 {
+            self.div = 0x0;
             return
         }
 
@@ -235,7 +244,8 @@ impl Default for Memory {
             inte: 0x0,
             intf: 0x0,
             joyp: 0x0,
-            keypress: -1
+            keypress: -1,
+            div: 0x0
         }
     }
 }

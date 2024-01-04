@@ -36,6 +36,9 @@ pub struct PPU {
     vram: [u8; 0x2000],
     scanline_timeline: usize,
     vblank_timeline: usize,
+    window_in_frame: bool,
+    window_line_counter: usize,
+    rendered_window_on_scanline: bool,
 
     sprite_fifo: Vec<RenderedObject>,
     background_fifo: Vec<u8>,
@@ -43,6 +46,7 @@ pub struct PPU {
 }
 
 pub struct TickState {
+    is_fetching_window: bool,
     fetcher_x: usize,
     scanline_x: usize,
     tile_number: u8,
@@ -209,13 +213,13 @@ impl PPU {
             let tile_x;
             let tile_y;
 
-            if false {
-                if (self.control >> WINDOW_TILE_MAP) & 0x1 == 0 {
+            if self.tick_state.is_fetching_window {
+                self.rendered_window_on_scanline = true;
+                if (self.control >> WINDOW_TILE_MAP) & 0x1 == 1 {
                     tile_map = 0x9C00;
                 }
-
-                tile_x = 0;
-                tile_y = 0;
+                tile_x = self.tick_state.fetcher_x as u16 & 0x1F;
+                tile_y = (32 * (self.window_line_counter / 8)) as u16;
             } else {
                 if (self.control >> BG_TILE_MAP) & 0x1 == 1 {
                     tile_map = 0x9C00;
@@ -223,11 +227,10 @@ impl PPU {
                 tile_x = (self.tick_state.fetcher_x as u16 + ((self.scx as u16) / 8)) & 0x1F;
                 tile_y = 32 * ((((self.ly as u16) + (self.scy as u16)) & 0xFF) / 8);
             }
-
             self.tick_state.tile_number = self.vram[((tile_map + ((tile_x + tile_y) & 0x3FF)) - 0x8000) as usize];
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 2 {
-            let offset = if false { 0 } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
+            let offset = if self.tick_state.is_fetching_window { (2 * (self.window_line_counter % 8)) as u16 } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
             let tile;
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
@@ -239,7 +242,7 @@ impl PPU {
             self.tick_state.tile_data_low = self.vram[((tile + offset) - 0x8000) as usize];
             self.tick_state.bg_fetcher_step += 1;
         } else if self.tick_state.bg_fetcher_step < 3 {
-            let offset = if false { 0 } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
+            let offset = if self.tick_state.is_fetching_window { (2 * (self.window_line_counter % 8)) as u16 } else { 2 * ((self.ly as u16 + self.scy as u16) % 8) };
             let tile;
 
             if (self.control >> TILE_ADDRESSING) & 0x1 == 1 {
@@ -275,6 +278,10 @@ impl PPU {
 
     fn tick(&mut self) { // 2 dots
         self.scanline_timeline += 2;
+
+        if self.wy == self.ly {
+            self.window_in_frame = true;
+        }
 
         match self.get_mode() {
             Mode::OAMSCAN => {
@@ -318,8 +325,8 @@ impl PPU {
 
                 if !sprite_fetching {
                     for _ in 0..2 { // draws 1 pixel per dot
-                        if self.background_fifo.len() > 0 {
-                            if self.tick_state.scanline_x == 0 { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD
+                        if self.background_fifo.len() > 8 {
+                            if self.tick_state.scanline_x == 0 { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD ** A BIT INACCURATE EACH REMOVAL SHOULD BE A CYCLE
                                 for _ in 0..(self.scx % 8) {
                                     self.background_fifo.remove(0);
                                 }
@@ -344,6 +351,14 @@ impl PPU {
                             }
 
                             self.tick_state.scanline_x += 1;
+
+                            if !self.tick_state.is_fetching_window && self.window_in_frame && ((self.control >> WINDOW_ENABLED) & 0x1 == 1) && (self.tick_state.scanline_x >= (self.wx - 7) as usize) {
+                                self.tick_state.bg_fetcher_step = 0;
+                                self.tick_state.fetcher_x = 0;
+                                self.background_fifo.clear();
+                                self.tick_state.is_fetching_window = true;
+                                break;
+                            }
                         }
 
                         if self.tick_state.scanline_x > 159 {
@@ -360,6 +375,11 @@ impl PPU {
                 self.sprite_buffer.clear();
 
                 if self.scanline_timeline == 456 { // 456 dots per scanline
+                    if self.rendered_window_on_scanline {
+                        self.window_line_counter += 1;
+                        self.rendered_window_on_scanline = false;
+                    }
+
                     self.stat_irq_triggered = false;
                     self.ly += 1;
                     if self.ly > 143 {
@@ -370,11 +390,13 @@ impl PPU {
                 }
             },
             Mode::VBLANK => {
+                self.window_line_counter = 0;
                 self.vblank_timeline += 2;
                 if self.vblank_timeline == 4560 { // 4560 dots per vblank
                     self.vblank_timeline = 0;
                     self.ly = 0;
                     self.vblank_irq_triggered = false;
+                    self.window_in_frame = false;
                     self.update_mode(Mode::OAMSCAN)
                 } else if self.vblank_timeline % 456 == 0 {
                     self.ly += 1;
@@ -420,6 +442,9 @@ impl Default for PPU {
             sprite_buffer: vec![],
             background_fifo: vec![],
             sprite_fifo: vec![],
+            window_in_frame: false,
+            window_line_counter: 0,
+            rendered_window_on_scanline: false
         }
     }
 }
@@ -436,7 +461,8 @@ impl Default for TickState {
             tile_data_low: 0,
             tile_number: 0,
             new_scanline: true,
-            current_sprite: None
+            current_sprite: None,
+            is_fetching_window: false
         }
     }
 }
