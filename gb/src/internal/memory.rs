@@ -1,4 +1,4 @@
-use crate::{internal::ppu::component::{PPU, Mode, Display}, console_log, log};
+use crate::{internal::ppu::{PPU, Mode, Display}, console_log, log};
 
 // const MBC_TYPE: u16 = 0x0147;
 

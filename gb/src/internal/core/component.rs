@@ -1,5 +1,5 @@
 use crate::{console_log, log};
-use crate::internal::ppu::component::Display;
+use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
 
@@ -932,9 +932,5 @@ mod tests {
                 } 
             }
         }
-    }
-
-    fn sm83_cpu_unit_tests() {
-        // TODO!
     }
 }
