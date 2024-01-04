@@ -1,0 +1,14 @@
+{
+  "name": "gb",
+  "version": "0.1.0",
+  "files": [
+    "gb_bg.wasm",
+    "gb.js",
+    "gb.d.ts"
+  ],
+  "module": "gb.js",
+  "types": "gb.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
