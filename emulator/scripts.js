@@ -1,10 +1,11 @@
 import init, { Emulator } from "./pkg/gb.js";
 
+let currentKeyPressed = -1;
+
 class Display {
   constructor(canvas, currentGame, canvasScale) {
     this.currentGame = currentGame;
     this.ctx = canvas.getContext("2d");
-    this.currentKeypress = -1;
     this.canvasScale = canvasScale;
   }
 
@@ -43,7 +44,7 @@ class Gameboy extends Display {
         let currentGame;
 
         function animate() {
-          let display = emulator.render();
+          let display = emulator.render(currentKeyPressed);
           for (let row = 0; row < 144; row++) {
             for (let col = 0; col < 160; col++) {
               ctx.fillStyle = colorPallete[display[row * 160 + col]];
@@ -74,4 +75,39 @@ init().then(() => {
   });
 
   canvas.addEventListener("click", function () {});
+});
+
+window.addEventListener("keydown", (e) => {
+  switch (e.code) {
+    case "ArrowUp":
+      currentKeyPressed = 1;
+      break;
+    case "ArrowLeft":
+      currentKeyPressed = 2;
+      break;
+    case "ArrowDown":
+      currentKeyPressed = 3;
+      break;
+    case "ArrowRight":
+      currentKeyPressed = 4;
+      break;
+    case "KeyQ": // A
+      currentKeyPressed = 5;
+      break;
+    case "KeyW": // B
+      currentKeyPressed = 6;
+      break;
+    case "KeyA": // START
+      currentKeyPressed = 7;
+      break;
+    case "KeyS": // SELECT
+      currentKeyPressed = 8;
+      break;
+    default:
+      console.log(`Invalid key input: ${e.code}`);
+  }
+});
+
+window.addEventListener("keyup", () => {
+  currentKeyPressed = -1;
 });

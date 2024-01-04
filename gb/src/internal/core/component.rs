@@ -820,7 +820,8 @@ impl CPU {
         }
     }
 
-    pub fn next_frame(&mut self, cycles: usize) -> Display {
+    pub fn next_frame(&mut self, cycles: usize, keypress: i8) -> Display {
+        self.bus.keypress = keypress;
         for _ in 0..cycles {
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() }
             self.bus.update_components();

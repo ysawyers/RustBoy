@@ -51,7 +51,7 @@ impl Emulator {
         self.core.bus.load_cartridge(bytes);
     }
 
-    pub fn render(&mut self) -> Vec<u8> {
-        return self.core.next_frame(CYCLES_PER_FRAME).to_vec();
+    pub fn render(&mut self, keypress: i8) -> Vec<u8> {
+        return self.core.next_frame(CYCLES_PER_FRAME, keypress).to_vec();
     }
 }

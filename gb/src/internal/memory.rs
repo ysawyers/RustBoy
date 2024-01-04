@@ -1,4 +1,4 @@
-use crate::{internal::ppu::component::{PPU, Mode, Display}};
+use crate::{internal::ppu::component::{PPU, Mode, Display}, console_log, log};
 
 // const MBC_TYPE: u16 = 0x0147;
 
@@ -16,6 +16,7 @@ pub struct Memory {
     pub intf: u8,
 
     // joypad
+    pub keypress: i8,
     joyp: u8,
 
     // components
@@ -66,10 +67,28 @@ impl Memory {
         if addr == 0xFF49 { return self.ppu.obp1 }
 
         if addr == 0xFF00 { // JOYPAD
-            if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
-                
-            } else if ((self.joyp >> 5) & 0x1 == 0) && ((self.joyp >> 4) & 0x1 == 1) { // SELECT
-                
+            if self.keypress != -1 {
+                let mut buttons_pressed = 0xF;
+
+                if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
+                    buttons_pressed = match self.keypress {
+                        1 => buttons_pressed & !(1 << 2), // UP
+                        2 => buttons_pressed & !(1 << 1), // LEFT
+                        3 => buttons_pressed & !(1 << 3), // DOWN
+                        4 => buttons_pressed & !(1 << 0), // RIGHT 
+                        _ => 0xF
+                    };
+                } else if ((self.joyp >> 5) & 0x1 == 0) && ((self.joyp >> 4) & 0x1 == 1) { // SELECT
+                    buttons_pressed = match self.keypress {
+                        5 => buttons_pressed & !(1 << 0), // A
+                        6 => buttons_pressed & !(1 << 1), // B
+                        7 => buttons_pressed & !(1 << 3), // START
+                        8 => buttons_pressed & !(1 << 2), // SELECT 
+                        _ => 0xF
+                    };
+                }
+
+                return buttons_pressed
             }
             return 0xF;
         }
@@ -215,7 +234,8 @@ impl Default for Memory {
             ppu: PPU::default(),
             inte: 0x0,
             intf: 0x0,
-            joyp: 0x0
+            joyp: 0x0,
+            keypress: -1
         }
     }
 }
