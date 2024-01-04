@@ -20,8 +20,8 @@ struct TickState {
     is_prefix: bool,
     instr: Vec<MicroInstr>,
     step: usize,
-    pub b8: u8,
-    pub b16: u8,
+    b8: u8,
+    b16: u8,
 }
 
 struct InterruptTickState {
@@ -154,24 +154,14 @@ pub enum Byte {
 impl CPU {
     fn fetch_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
-
-        if !self.halt_bug {
-            self.pc += 1;
-        } else {
-            self.halt_bug = false;
-        }
+        if !self.halt_bug { self.pc += 1 } else { self.halt_bug = false }
 
         (opcode, self.decode_instr(opcode))
     }
 
     fn fetch_prefix_instr(&mut self) -> (u8, Vec<MicroInstr>) {
-        let opcode = self.bus.read(self.pc);
-        
-        if !self.halt_bug {
-            self.pc += 1;
-        } else {
-            self.halt_bug = false;
-        }
+        let opcode = self.bus.read(self.pc);        
+        self.pc += 1;
 
         (opcode, self.decode_prefix_instr(opcode))
     }

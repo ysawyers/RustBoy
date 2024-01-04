@@ -176,23 +176,20 @@ impl Memory {
         self.memory[addr as usize] = val
     }
 
-    pub fn update_requested_interrupts(&mut self) { // MAKE SURE TO ADD THE CONDITION WHERE ONLY 1 STAT INTERRUPT PER SCANLINE!
+    pub fn update_requested_interrupts(&mut self) {
         let mut requests: u8 = 0x0;
 
-        if ((self.ppu.stat >> 6) & 0x1 == 1) && ((self.ppu.stat >> 2) & 0x1 == 1) { // STAT interrupt
-            self.ppu.stat &= !(1 << 2); // reset ly == lyc bit
-            requests |= 0b00000010;
-        } 
+        if !self.ppu.vblank_irq_triggered { // VBLANK interrupt
+            requests |= 0b00000001; 
+            self.ppu.vblank_irq_triggered = true;
+        }
 
-        if !self.ppu.new_mode.is_none() {
-            let new_mode = self.ppu.new_mode.as_ref().unwrap();
-
-            if *new_mode == Mode::VBLANK { requests |= 0b00000001 }; // VBLANK interrupt
-            // if ((self.ppu.stat >> 5) & 0x1 == 1) && (*new_mode == Mode::OAMSCAN) { requests |= 0b00000010 }; // STAT interrupt
-            // if ((self.ppu.stat >> 4) & 0x1 == 1) && (*new_mode == Mode::VBLANK) { requests |= 0b00000010 }; // STAT interrupt
-            // if ((self.ppu.stat >> 3) & 0x1 == 1) && (*new_mode == Mode::HBLANK) { requests |= 0b00000010 }; // STAT interrupt
-
-            self.ppu.new_mode = None;
+        if !self.ppu.stat_irq_triggered {
+            if ((self.ppu.stat >> 6) & 0x1 == 1) && (self.ppu.ly == self.ppu.lyc) { requests |= 0b00000010; } // STAT interrupt (LY == LYC)
+            if ((self.ppu.stat >> 5) & 0x1 == 1) && (self.ppu.stat & 0x3 == 2) { requests |= 0b00000010 }; // STAT interrupt (OAM)
+            if ((self.ppu.stat >> 4) & 0x1 == 1) && (self.ppu.stat & 0x3 == 1) { requests |= 0b00000010 }; // STAT interrupt (VBLANK)
+            if ((self.ppu.stat >> 3) & 0x1 == 1) && (self.ppu.stat & 0x3 == 0) { requests |= 0b00000010 }; // STAT interrupt (HBLANK)
+            self.ppu.stat_irq_triggered = true;
         }
 
         self.intf |= requests;
