@@ -142,10 +142,11 @@ impl PPU {
             let sprite_height = (if self.control >> SPRITE_SIZE & 0x1 == 1 { 16 } else { 8 }) as u16;
 
             let vertical_flip = (sprite.sprite_flags >> 6) & 0x1 == 1;
-            let mut vertical_offset = self.ly as u16 + 8; // why does + 8 work? no idea. does it? yes.
+            
+            // shoutout to nemo for helping me with this math lol
+            let mut vertical_offset = ((self.ly as u16).wrapping_sub((sprite.y_pos as u16).wrapping_sub(16)) % sprite_height).wrapping_mul(2) as u16;
             if vertical_flip {
-                let y_pos = sprite.y_pos as u16;
-                vertical_offset = ((y_pos + (sprite_height - 1)) - vertical_offset) - 8;
+                vertical_offset = ((sprite_height - 1) *2 ) - vertical_offset;
             }
 
             if self.tick_state.sprite_fetcher_step < 1 {
@@ -153,18 +154,17 @@ impl PPU {
                 self.tick_state.bg_fetcher_step = 0;
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 2 {
-                let offset = 2 * (vertical_offset as u16 % sprite_height);
-                let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
-                self.tick_state.tile_data_low = self.vram[(tile + offset - 0x8000) as usize];
+                let tile: u16 = self.tick_state.tile_number as u16 * 16;
+                self.tick_state.tile_data_low = self.vram[(tile + vertical_offset) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else if self.tick_state.sprite_fetcher_step < 3 {
-                let offset = 2 * (vertical_offset as u16 % sprite_height);
-                let tile: u16 = 0x8000 + (self.tick_state.tile_number as u16 * 16);
-                self.tick_state.tile_data_high = self.vram[(tile + offset + 1 - 0x8000) as usize];
+                let tile: u16 = self.tick_state.tile_number as u16 * 16;
+                self.tick_state.tile_data_high = self.vram[(tile + vertical_offset + 1) as usize];
                 self.tick_state.sprite_fetcher_step += 1;
             } else {
                 let horizontal_flip = sprite.sprite_flags >> 5 & 0x1 == 1;
                 let base = (if sprite.x_pos < 8 { 8 - sprite.x_pos } else { 0 }) + (self.sprite_fifo.len() as u8);
+
                 // actually what the fuck is this... it works though so we gonna just rock n' roll
                 if self.sprite_fifo.len() >= 3 {
                     for i in base..8 {
@@ -187,6 +187,7 @@ impl PPU {
                         });
                     }
                 }
+                
                 self.tick_state.current_sprite = self.detect_sprite();
                 self.tick_state.sprite_fetcher_step = 0;
             }
