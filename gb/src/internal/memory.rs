@@ -1,4 +1,5 @@
-use crate::{internal::ppu::{PPU, Mode, Display}, console_log, log};
+use crate::internal::ppu::{PPU, Mode, Display};
+use crate::internal::timers::Timers;
 
 // const MBC_TYPE: u16 = 0x0147;
 
@@ -19,11 +20,9 @@ pub struct Memory {
     pub keypress: i8,
     joyp: u8,
 
-    // timers
-    pub div: u16,
-
     // components
-    ppu: PPU
+    ppu: PPU,
+    timers: Timers
 }
 
 impl Memory {
@@ -55,7 +54,7 @@ impl Memory {
         if addr >= 0x8000 && addr <= 0x9FFF { return self.ppu.read_vram(addr - 0x8000) }
         if addr >= 0xFE00 && addr <= 0xFE9F { return self.ppu.read_oam(addr - 0xFE00) }
         if addr == 0xFF01 { return 0xFF }
-        if addr == 0xFF04 { return (self.div >> 8) as u8 }
+        if addr == 0xFF04 { return (self.timers.div >> 8) as u8 }
         if addr == 0xFF40 { return self.ppu.control }
         if addr == 0xFF41 { return self.ppu.stat }
         if addr == 0xFF42 { return self.ppu.scy }
@@ -119,7 +118,7 @@ impl Memory {
         }
 
         if addr == 0xFF04 {
-            self.div = 0x0;
+            self.timers.div = 0x0;
             return
         }
 
@@ -245,7 +244,7 @@ impl Default for Memory {
             intf: 0x0,
             joyp: 0x0,
             keypress: -1,
-            div: 0x0
+            timers: Timers::default()
         }
     }
 }

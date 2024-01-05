@@ -14,9 +14,6 @@ pub struct CPU {
     interrupt_tick_state: Option<InterruptTickState>,
     is_halted: bool,
     halt_bug: bool,
-
-    // timers
-    div_cycles_passed: usize
 }
 
 struct TickState {
@@ -826,8 +823,6 @@ impl CPU {
     pub fn next_frame(&mut self, cycles: usize, keypress: i8) -> Display {
         self.bus.keypress = keypress;
         for _ in 0..cycles {
-            self.div_cycles_passed += 4;
-
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() }
             self.bus.update_components();
             self.bus.update_requested_interrupts();
@@ -848,11 +843,6 @@ impl CPU {
                     }
                 }
             }
-
-            if self.div_cycles_passed == 256 {
-                self.bus.div += 1;
-                self.div_cycles_passed = 0;
-            }
         }
         return self.bus.get_display();
     }
@@ -870,8 +860,7 @@ impl Default for CPU {
             should_enable_ime: false,
             interrupt_tick_state: None,
             is_halted: false,
-            halt_bug: false,
-            div_cycles_passed: 0
+            halt_bug: false
         }
     }
 }
