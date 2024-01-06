@@ -1,5 +1,4 @@
-use crate::CPU;
-use crate::internal::core::component::MicroInstr;
+use crate::internal::core::component::{MicroInstr, CPU};
 use crate::internal::core::registers::Register;
 
 impl CPU {
@@ -83,7 +82,7 @@ impl CPU {
             0x43 => vec![MicroInstr::BIT(0, Register::E)], // BIT 0, E
             0x44 => vec![MicroInstr::BIT(0, Register::H)], // BIT 0, H
             0x45 => vec![MicroInstr::BIT(0, Register::L)], // BIT 0, L
-            0x46 => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(0)], // BIT 0, (HL)
+            0x46 => vec![MicroInstr::NOP, MicroInstr::BITHL(0)], // BIT 0, (HL)
             0x47 => vec![MicroInstr::BIT(0, Register::A)], // BIT 0, B
             0x48 => vec![MicroInstr::BIT(1, Register::B)], // BIT 1, B
             0x49 => vec![MicroInstr::BIT(1, Register::C)], // BIT 1, C
@@ -91,7 +90,7 @@ impl CPU {
             0x4B => vec![MicroInstr::BIT(1, Register::E)], // BIT 1, E
             0x4C => vec![MicroInstr::BIT(1, Register::H)], // BIT 1, H
             0x4D => vec![MicroInstr::BIT(1, Register::L)], // BIT 1, L
-            0x4E => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(1)], // BIT 1, (HL)
+            0x4E => vec![MicroInstr::NOP, MicroInstr::BITHL(1)], // BIT 1, (HL)
             0x4F => vec![MicroInstr::BIT(1, Register::A)], // BIT 1, A
             0x50 => vec![MicroInstr::BIT(2, Register::B)], // BIT 2, B
             0x51 => vec![MicroInstr::BIT(2, Register::C)], // BIT 2, C
@@ -99,7 +98,7 @@ impl CPU {
             0x53 => vec![MicroInstr::BIT(2, Register::E)], // BIT 2, E
             0x54 => vec![MicroInstr::BIT(2, Register::H)], // BIT 2, H
             0x55 => vec![MicroInstr::BIT(2, Register::L)], // BIT 2, L
-            0x56 => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(2)], // BIT 2, (HL)
+            0x56 => vec![MicroInstr::NOP, MicroInstr::BITHL(2)], // BIT 2, (HL)
             0x57 => vec![MicroInstr::BIT(2, Register::A)], // BIT 2, A
             0x58 => vec![MicroInstr::BIT(3, Register::B)], // BIT 3, B
             0x59 => vec![MicroInstr::BIT(3, Register::C)], // BIT 3, C
@@ -107,7 +106,7 @@ impl CPU {
             0x5B => vec![MicroInstr::BIT(3, Register::E)], // BIT 3, E
             0x5C => vec![MicroInstr::BIT(3, Register::H)], // BIT 3, H
             0x5D => vec![MicroInstr::BIT(3, Register::L)], // BIT 3, L
-            0x5E => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(3)], // BIT 3, (HL)
+            0x5E => vec![MicroInstr::NOP, MicroInstr::BITHL(3)], // BIT 3, (HL)
             0x5F => vec![MicroInstr::BIT(3, Register::A)], // BIT 3, A
             0x60 => vec![MicroInstr::BIT(4, Register::B)], // BIT 4, B
             0x61 => vec![MicroInstr::BIT(4, Register::C)], // BIT 4, C
@@ -115,7 +114,7 @@ impl CPU {
             0x63 => vec![MicroInstr::BIT(4, Register::E)], // BIT 4, E
             0x64 => vec![MicroInstr::BIT(4, Register::H)], // BIT 4, H
             0x65 => vec![MicroInstr::BIT(4, Register::L)], // BIT 4, L
-            0x66 => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(4)], // BIT 4, (HL)
+            0x66 => vec![MicroInstr::NOP, MicroInstr::BITHL(4)], // BIT 4, (HL)
             0x67 => vec![MicroInstr::BIT(4, Register::A)], // BIT 4, A
             0x68 => vec![MicroInstr::BIT(5, Register::B)], // BIT 5, B
             0x69 => vec![MicroInstr::BIT(5, Register::C)], // BIT 5, C
@@ -123,7 +122,7 @@ impl CPU {
             0x6B => vec![MicroInstr::BIT(5, Register::E)], // BIT 5, E
             0x6C => vec![MicroInstr::BIT(5, Register::H)], // BIT 5, H
             0x6D => vec![MicroInstr::BIT(5, Register::L)], // BIT 5, L
-            0x6E => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(5)], // BIT 5, (HL)
+            0x6E => vec![MicroInstr::NOP, MicroInstr::BITHL(5)], // BIT 5, (HL)
             0x6F => vec![MicroInstr::BIT(5, Register::A)], // BIT 5, A
             0x70 => vec![MicroInstr::BIT(6, Register::B)], // BIT 6, B
             0x71 => vec![MicroInstr::BIT(6, Register::C)], // BIT 6, C
@@ -131,7 +130,7 @@ impl CPU {
             0x73 => vec![MicroInstr::BIT(6, Register::E)], // BIT 6, E
             0x74 => vec![MicroInstr::BIT(6, Register::H)], // BIT 6, H
             0x75 => vec![MicroInstr::BIT(6, Register::L)], // BIT 6, L
-            0x76 => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(6)], // BIT 6, (HL)
+            0x76 => vec![MicroInstr::NOP, MicroInstr::BITHL(6)], // BIT 6, (HL)
             0x77 => vec![MicroInstr::BIT(6, Register::A)], // BIT 6, A
             0x78 => vec![MicroInstr::BIT(7, Register::B)], // BIT 7, B
             0x79 => vec![MicroInstr::BIT(7, Register::C)], // BIT 7, C
@@ -139,7 +138,7 @@ impl CPU {
             0x7B => vec![MicroInstr::BIT(7, Register::E)], // BIT 7, E
             0x7C => vec![MicroInstr::BIT(7, Register::H)], // BIT 7, H
             0x7D => vec![MicroInstr::BIT(7, Register::L)], // BIT 7, L
-            0x7E => vec![MicroInstr::NOP, MicroInstr::NOP, MicroInstr::BITHL(7)], // BIT 7, (HL)
+            0x7E => vec![MicroInstr::NOP, MicroInstr::BITHL(7)], // BIT 7, (HL)
             0x7F => vec![MicroInstr::BIT(7, Register::A)], // BIT 7, A
 
             0x80 => vec![MicroInstr::RES(0, Register::B)], // RES 0, B

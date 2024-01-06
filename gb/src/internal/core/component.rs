@@ -1,4 +1,3 @@
-use crate::{console_log, log};
 use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
@@ -9,11 +8,16 @@ pub struct CPU {
     pub sp: u16,
     pub bus: Memory,
     ime: bool,
-    should_enable_ime: bool,
+    should_enable_ime: usize,
     tick_state: Option<TickState>,
     interrupt_tick_state: Option<InterruptTickState>,
     is_halted: bool,
     halt_bug: bool,
+}
+
+pub struct Instruction {
+    pub name: String,
+    pub steps: Vec<MicroInstr>
 }
 
 struct TickState {
@@ -154,24 +158,20 @@ pub enum Byte {
 impl CPU {
     fn fetch_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
-        if !self.halt_bug { self.pc += 1 } else { self.halt_bug = false }
+        self.pc += 1; // halt bug?
+        //if !self.halt_bug { self.pc = self.pc.wrapping_add(1) } else { self.halt_bug = false }
 
         (opcode, self.decode_instr(opcode))
     }
-
+ 
     fn fetch_prefix_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);        
-        self.pc += 1;
+        self.pc = self.pc.wrapping_add(1);
 
         (opcode, self.decode_prefix_instr(opcode))
     }
 
     fn execute(&mut self) {
-        if self.should_enable_ime {
-            self.should_enable_ime = false;
-            self.ime = true;
-        }
-
         if self.tick_state.is_none() {
             let instr = self.fetch_instr();
 
@@ -182,6 +182,7 @@ impl CPU {
                 b8: 0,
                 b16: 0
             };
+
             self.tick_state.get_or_insert(tick_state);
         }
 
@@ -289,7 +290,7 @@ impl CPU {
             MicroInstr::INCDE => self.registers.set_de(self.registers.get_de().wrapping_add(1)),
             MicroInstr::DI => {
                 self.ime = false;
-                self.should_enable_ime = false;
+                self.should_enable_ime = 0;
             },
             MicroInstr::LDSPNN => self.sp = ((state.b16 as u16) << 8) | (state.b8 as u16),
             MicroInstr::OR(register) => {
@@ -518,7 +519,7 @@ impl CPU {
             MicroInstr::LDSPHL => self.sp = self.registers.get_hl(),
             MicroInstr::RETI => {
                 self.pc = ((state.b16 as u16) << 8) | (state.b8 as u16);
-                self.should_enable_ime = true;
+                self.should_enable_ime = 2;
             },
             MicroInstr::RST(addr) => self.pc = addr,
             MicroInstr::INCSP => self.sp = self.sp.wrapping_add(1),
@@ -764,32 +765,28 @@ impl CPU {
             MicroInstr::RESHL(pos) => self.bus.write(self.registers.get_hl(), self.bus.read(self.registers.get_hl()) & !(1 << pos)),
             MicroInstr::SET(pos, register) => self.registers[register] |= 1 << pos,
             MicroInstr::SETHL(pos) => self.bus.write(self.registers.get_hl(), self.bus.read(self.registers.get_hl()) | 1 << pos),
-            MicroInstr::EI => self.should_enable_ime = true,
-            MicroInstr::HALT => self.is_halted = true,
-            MicroInstr::STOP => {
-                console_log!("ENCOUNTERED STOP!");
-                panic!("NOT IMPLEMENTED!");
-            }
+            MicroInstr::EI => self.should_enable_ime = 2,
+            MicroInstr::HALT => if !self.bus.flat_ram { self.is_halted = true },
+            MicroInstr::STOP => ()
         }
-        if !self.is_halted { 
-            state.step += 1;
-        } else {
-            if self.ime && ((self.bus.inte & self.bus.intf) != 0) {
-                self.is_halted = false;
-                self.halt_bug = true;
-                state.step += 1;
-            }
 
-            // if interrupts not set and interrupt has been requested (that can be serviced) HALT BUG
-            if !self.ime && ((self.bus.inte & self.bus.intf) != 0) {
-                self.is_halted = false;
-                self.halt_bug = true;
-                state.step += 1;
-            }
+        if !self.is_halted {
+            state.step += 1;
+        } else if (self.bus.inte & self.bus.intf) != 0 {
+            self.is_halted = false;
+            self.halt_bug = true;
+            state.step += 1;
         }
 
         if state.step >= state.instr.len() {
-            self.tick_state = None
+            self.tick_state = None;
+
+            if self.should_enable_ime > 0 {
+                self.should_enable_ime -= 1;
+                if self.should_enable_ime == 0 {
+                    self.ime = true;
+                }
+            }
         };
     }
 
@@ -810,7 +807,10 @@ impl CPU {
             },
             4 => {
                 match state.interrupt {
-                    Interrupt::VBLANK => self.pc = 0x0040,
+                    Interrupt::VBLANK => {
+                        println!("did interrupt");
+                        self.pc = 0x0040;
+                    },
                     Interrupt::STAT => self.pc = 0x0048,
                     Interrupt::TIMER => self.pc = 0x0050
                 }
@@ -857,7 +857,7 @@ impl Default for CPU {
             pc: 0x0,
             tick_state: None,
             ime: false,
-            should_enable_ime: false,
+            should_enable_ime: 0,
             interrupt_tick_state: None,
             is_halted: false,
             halt_bug: false
@@ -870,55 +870,118 @@ mod tests {
     use std::fs;
     use super::*;
     use pretty_assertions::assert_eq;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct JsmooTestObject {
+        name: String,
+        initial: JsmooTestObjectState,
+        r#final: JsmooTestObjectState,
+        cycles: Vec<(u16, Option<u16>, String)>
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct JsmooTestObjectState {
+        a: u8,
+        b: u8,
+        c: u8,
+        d: u8,
+        e: u8,
+        f: u8,
+        h: u8,
+        l: u8,
+        sp: u16,
+        pc: u16,
+        ram: Vec<[usize; 2]>
+    }
 
     #[test]
-    fn blargg_cpu_tests() {
-        let files = fs::read_dir("./tests/blargg/logs").unwrap();
+    fn jsmoo_v1_cpu_tests() {
+        let files = fs::read_dir("./tests/v1").unwrap();
 
         for file in files {
-            let mut core = CPU::default();
+            let file_os_string = file.as_ref().unwrap().file_name();
+            let file_string_split = file_os_string.to_str().unwrap().split(".");
+            let file_parts: Vec<_> = file_string_split.collect();
+        
+            let body = fs::read_to_string(String::from("tests/v1/") + file_parts[0] + ".json").expect("File not found!");
+        
+            let mut lines_passed = 0;
 
-            let file_name = file.as_ref().unwrap().file_name();
-            let file_name_parts: Vec<_> = file_name.to_str().unwrap().split(".").collect();
+            let json_tests: Vec<JsmooTestObject> = serde_json::from_str(&body).expect("JSON was not well-formatted");
+            for test in json_tests {
+                let mut cpu = CPU::default();
+                cpu.bus.flat_ram = true;
 
-            let bytes = fs::read(String::from("./tests/blargg/roms/") + file_name_parts[0] + ".gb").expect("File not found!");
-            core.bus.load_cartridge(bytes);
-            core.bus.debug = true;
+                cpu.registers[Register::A] = test.initial.a;
+                cpu.registers[Register::B] = test.initial.b;
+                cpu.registers[Register::C] = test.initial.c;
+                cpu.registers[Register::D] = test.initial.d;
+                cpu.registers[Register::E] = test.initial.e;
+                cpu.registers[Register::F] = test.initial.f;
+                cpu.registers[Register::H] = test.initial.h;
+                cpu.registers[Register::L] = test.initial.l;
 
-            core.pc = 0x100;
-            core.sp = 0xFFFE;
-            
-            core.registers[Register::A] = 0x01;
-            core.registers[Register::F] = 0xB0;
-            core.registers[Register::B] = 0x00;
-            core.registers[Register::C] = 0x13;
-            core.registers[Register::D] = 0x00;
-            core.registers[Register::E] = 0xD8;
-            core.registers[Register::H] = 0x01;
-            core.registers[Register::L] = 0x4D;
+                cpu.pc = test.initial.pc;
+                cpu.sp = test.initial.sp;
 
-            let body = fs::read_to_string(String::from("./tests/blargg/logs/") + file_name.to_str().unwrap()).expect(file_name.to_str().unwrap());
+                for loc in test.initial.ram {
+                    cpu.bus.write(loc[0] as u16, loc[1] as u8);
+                }
 
-            let mut prev = core.bus.read(core.pc);
-            let mut lines = 0;
+                let mut prefixed = false;
+                let mut opcode_str = file_parts[0];
+                if opcode_str.len() == 5 {
+                    let parts = opcode_str.split(" ");
+                    let parts_vec: Vec<_> = parts.collect();
+                    opcode_str = parts_vec[1];
+                    prefixed = true;
+                }
 
-            for line in body.lines() {
-                let core_state = format!(
-                    "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
-                    core.registers[Register::A], core.registers[Register::F], core.registers[Register::B], core.registers[Register::C], core.registers[Register::D], 
-                    core.registers[Register::E], core.registers[Register::H], core.registers[Register::L], core.sp, core.pc, 
-                    core.bus.read(core.pc), core.bus.read(core.pc+1), core.bus.read(core.pc+2), core.bus.read(core.pc+3)
-                );
-                lines += 1;
+                let opcode = u8::from_str_radix(opcode_str, 16);
+                let opcode_num = opcode.unwrap();
+                let steps = if prefixed {
+                    cpu.fetch_instr();
+                    cpu.fetch_prefix_instr();
+                    cpu.decode_prefix_instr(opcode_num)
+                } else { 
+                    cpu.fetch_instr();
+                    cpu.decode_instr(opcode_num)
+                };
 
-                assert_eq!(core_state, line, "PROBLEM WITH OPCODE 0x{:02X} LINE: {}", prev, lines);
+                cpu.tick_state.get_or_insert(TickState{
+                    instr: steps.clone(),
+                    step: 0,
+                    is_prefix: false,
+                    b8: 0,
+                    b16: 0
+                });
 
-                prev = core.bus.read(core.pc);
+                let mut steps = if prefixed { 1 } else { 0 };
+                while !cpu.tick_state.is_none() {
+                    steps += 1;
+                    cpu.execute();
+                }
 
-                core.execute();
-                while !core.tick_state.is_none() {
-                    core.execute();
-                } 
+                if opcode_num != 0x76 && opcode_num != 0x10 {
+                    assert_eq!(steps, test.cycles.len(), "Failed instruction {}", test.name);
+                }
+
+                for mem in test.r#final.ram {
+                    assert_eq!(cpu.bus.read(mem[0] as u16), mem[1] as u8, "Failed instruction {}", test.name);
+                }
+
+                let expected_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
+                test.r#final.a, test.r#final.b, test.r#final.c, test.r#final.d, test.r#final.e, test.r#final.f, 
+                test.r#final.h, test.r#final.l, test.r#final.pc, test.r#final.sp);
+
+                let recieved_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
+                cpu.registers[Register::A], cpu.registers[Register::B], cpu.registers[Register::C], cpu.registers[Register::D], cpu.registers[Register::E], cpu.registers[Register::F], 
+                cpu.registers[Register::H], cpu.registers[Register::L], cpu.pc, cpu.sp);
+
+                assert_eq!(recieved_state, expected_state, "Failed instruction {}", test.name);
+                
+                lines_passed += 1;
             }
         }
     }

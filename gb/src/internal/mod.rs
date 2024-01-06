@@ -1,4 +1,4 @@
 pub mod memory;
 pub mod core;
 pub mod ppu;
-pub mod timers;
+pub mod timer;

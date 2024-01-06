@@ -1,15 +1,16 @@
-use crate::internal::ppu::{PPU, Mode, Display};
-use crate::internal::timers::Timers;
+use crate::internal::ppu::{PPU, Display};
+use crate::internal::timer::Timer;
 
 // const MBC_TYPE: u16 = 0x0147;
 
 pub struct Memory {
     // testing
     pub debug: bool,
+    pub flat_ram: bool,
 
     memory: [u8; 0x10000],
     boot_rom: [u8; 0x100],
-    boot_rom_mounted: bool,
+    pub boot_rom_mounted: bool,
     catridge_mounted: bool,
 
     // interrupts
@@ -22,7 +23,7 @@ pub struct Memory {
 
     // components
     ppu: PPU,
-    timers: Timers
+    timer: Timer
 }
 
 impl Memory {
@@ -47,6 +48,10 @@ impl Memory {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
+        if self.flat_ram {
+            return self.memory[addr as usize];
+        }
+
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
         }
@@ -54,7 +59,10 @@ impl Memory {
         if addr >= 0x8000 && addr <= 0x9FFF { return self.ppu.read_vram(addr - 0x8000) }
         if addr >= 0xFE00 && addr <= 0xFE9F { return self.ppu.read_oam(addr - 0xFE00) }
         if addr == 0xFF01 { return 0xFF }
-        if addr == 0xFF04 { return (self.timers.div >> 8) as u8 }
+        if addr == 0xFF04 { return (self.timer.sysclock >> 8) as u8 }
+        if addr == 0xFF05 { return self.timer.tima }
+        if addr == 0xFF06 { return self.timer.tma }
+        if addr == 0xFF07 { return self.timer.tac }
         if addr == 0xFF40 { return self.ppu.control }
         if addr == 0xFF41 { return self.ppu.stat }
         if addr == 0xFF42 { return self.ppu.scy }
@@ -103,8 +111,9 @@ impl Memory {
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        if self.catridge_mounted && addr <= 0x7FFF { 
-            // panic!("AHH WHAT DO I DO HERE???");
+        if self.flat_ram {
+            self.memory[addr as usize] = val;
+            return
         }
 
         if addr >= 0x8000 && addr <= 0x9FFF {
@@ -118,12 +127,32 @@ impl Memory {
         }
 
         if addr == 0xFF04 {
-            self.timers.div = 0x0;
+            // TODO
+            self.timer.sysclock = 0x0;
+            return
+        }
+
+        if addr == 0xFF05 {
+            self.timer.tima = val;
+            return
+        }
+
+        if addr == 0xFF06 {
+            self.timer.tma_previous.get_or_insert(self.timer.tma);
+            self.timer.tma = val;
+            return
+        }
+
+        if addr == 0xFF07 {
+            self.timer.tac = val;
             return
         }
 
         if addr == 0xFF40 {
             self.ppu.control = val;
+            if self.ppu.control >> 7 & 0x1 == 0 { // if LCD is switched off
+                self.ppu.stat &= 0b11111100; // reset stat mode to 0
+            }
             return
         }
 
@@ -219,11 +248,19 @@ impl Memory {
             self.ppu.stat_irq_triggered = true;
         }
 
+        if self.timer.tima_irq > 0 {
+            self.timer.tima_irq -= 1;
+            if self.timer.tima_irq == 0 {
+                requests |= 0b00000100; // TIMER interrupt
+            }
+        }
+
         self.intf |= requests;
     }
 
     pub fn update_components(&mut self) {
         self.ppu.update();
+        self.timer.update();
     }
 
     pub fn get_display(&self) -> Display {
@@ -244,7 +281,8 @@ impl Default for Memory {
             intf: 0x0,
             joyp: 0x0,
             keypress: -1,
-            timers: Timers::default()
+            timer: Timer::default(),
+            flat_ram: false
         }
     }
 }
