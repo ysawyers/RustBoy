@@ -2,6 +2,7 @@
 
 ![Tetris boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/tetris-boot-screen.png "Tetris")
 ![Asteroids boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/asteroids-boot-screen.png "Asteroids")
+![Bomb Jack boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/bombjack-boot-screen.png "Bomb Jack")
 
 # Tests
 

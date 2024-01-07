@@ -124,9 +124,6 @@ impl Memory {
         }
 
         if addr == 0xFF04 {
-            // if self.timer.tac >> 2 & 0x1 == 0 && self.timer.current_freq == 1 {
-            //     panic!("Obscure behavior");
-            // }
             self.timer.sysclock = 0x0;
             return
         }
