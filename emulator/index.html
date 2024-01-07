@@ -10,10 +10,10 @@
         margin: 0;
       }
       canvas {
-        border: 2px solid black;
+        border: 3px solid gray;
         border-radius: 2px;
         padding: 1px;
-        background-color: lightgray;
+        background-color: #9bbc0f;
       }
     </style>
   </head>
@@ -26,22 +26,19 @@
             <canvas id="emulator" width="800" height="600"></canvas>
           </div>
           <div style="margin-left: 20px">
-            <div style="width: fit-content">
+            <!-- <div style="width: fit-content">
               <p style="margin-bottom: 5px">Choose Emulator:</p>
               <select id="emulator-select" size="5">
                 <option value="gb">Game Boy</option>
               </select>
-            </div>
-            <div style="margin-top: 15px">
+            </div> -->
+            <div>
               <p style="margin-bottom: 5px">Choose ROM:</p>
               <select id="rom-select-gb" size="15">
-                <option value="PPU.gb">PPU</option>
                 <option value="TETRIS.gb">TETRIS</option>
                 <option value="MARIO.gb">MARIO</option>
                 <option value="ASTEROID.gb">ASTEROID</option>
                 <option value="BOMB.gb">BOMB</option>
-                <option value="TIMING.gb">TIMING</option>
-                <option value="INTERRUPT.gb">INTERRUPT</option>
               </select>
             </div>
           </div>

@@ -1,21 +1,20 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 
-// const MBC_TYPE: u16 = 0x0147;
+const MBC_TYPE: u16 = 0x0147;
 
 pub struct Memory {
     // testing
-    pub debug: bool,
     pub flat_ram: bool,
 
-    memory: [u8; 0x10000],
+    boot_rom_mounted: bool,
     boot_rom: [u8; 0x100],
-    pub boot_rom_mounted: bool,
+    memory: [u8; 0x10000],
     catridge_mounted: bool,
 
     // interrupts
-    pub inte: u8,
-    pub intf: u8,
+    pub IE: u8,
+    pub IF: u8,
 
     // joypad
     pub keypress: i8,
@@ -48,7 +47,7 @@ impl Memory {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        if self.flat_ram {
+        if self.flat_ram { // just treats memory as flat 64 kb for testing! (specifically jsmoo)
             return self.memory[addr as usize];
         }
 
@@ -56,174 +55,62 @@ impl Memory {
             return self.boot_rom[addr as usize]
         }
 
-        if addr >= 0x8000 && addr <= 0x9FFF { return self.ppu.read_vram(addr - 0x8000) }
-        if addr >= 0xFE00 && addr <= 0xFE9F { return self.ppu.read_oam(addr - 0xFE00) }
-        if addr == 0xFF01 { return 0xFF }
-        if addr == 0xFF04 { return (self.timer.sysclock >> 8) as u8 }
-        if addr == 0xFF05 { return self.timer.tima }
-        if addr == 0xFF06 { return self.timer.tma }
-        if addr == 0xFF07 { return self.timer.tac }
-        if addr == 0xFF40 { return self.ppu.control }
-        if addr == 0xFF41 { return self.ppu.stat }
-        if addr == 0xFF42 { return self.ppu.scy }
-        if addr == 0xFF43 { return self.ppu.scx }
-        if addr == 0xFF44 { return if self.debug { 0x90 } else { self.ppu.ly } }
-        if addr == 0xFF45 { return self.ppu.lyc }
-        if addr == 0xFF4A { return self.ppu.wy }
-        if addr == 0xFF4B { return self.ppu.wx }
-        if addr == 0xFF0F { return self.intf }
-        if addr == 0xFFFF { return self.inte }
-        if addr == 0xFF47 { return self.ppu.bgp }
-        if addr == 0xFF48 { return self.ppu.obp0 }
-        if addr == 0xFF49 { return self.ppu.obp1 }
-
-        if addr == 0xFF00 { // JOYPAD
-            if self.keypress != -1 {
-                let mut buttons_pressed = 0xF;
-
-                if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
-                    buttons_pressed = match self.keypress {
-                        1 => buttons_pressed & !(1 << 2), // UP
-                        2 => buttons_pressed & !(1 << 1), // LEFT
-                        3 => buttons_pressed & !(1 << 3), // DOWN
-                        4 => buttons_pressed & !(1 << 0), // RIGHT 
-                        _ => 0xF
-                    };
-                } else if ((self.joyp >> 5) & 0x1 == 0) && ((self.joyp >> 4) & 0x1 == 1) { // SELECT
-                    buttons_pressed = match self.keypress {
-                        5 => buttons_pressed & !(1 << 0), // A
-                        6 => buttons_pressed & !(1 << 1), // B
-                        7 => buttons_pressed & !(1 << 3), // START
-                        8 => buttons_pressed & !(1 << 2), // SELECT 
-                        _ => 0xF
-                    };
+        match addr {
+            0x8000..=0x9FFF => self.ppu.read_vram(addr - 0x8000),
+            0xFE00..=0xFE9F => self.ppu.read_oam(addr - 0xFE00),
+            0xFF01 => 0xFF, // some serial register not implemented.
+            0xFF04..=0xFF07 => self.timer.read_registers(addr),
+            0xFF40..=0xFF4B => self.ppu.read_registers(addr),
+            0xFF0F => self.IF,
+            0xFFFF => self.IE,
+            0xFF00 => {
+                if self.keypress != -1 {
+                    let mut buttons_pressed = 0xF;
+    
+                    if ((self.joyp >> 4) & 0x1 == 0) && ((self.joyp >> 5) & 0x1 == 1) { // DPAD
+                        buttons_pressed = match self.keypress {
+                            1 => buttons_pressed & !(1 << 2), // UP
+                            2 => buttons_pressed & !(1 << 1), // LEFT
+                            3 => buttons_pressed & !(1 << 3), // DOWN
+                            4 => buttons_pressed & !(1 << 0), // RIGHT 
+                            _ => 0xF
+                        };
+                    } else if ((self.joyp >> 5) & 0x1 == 0) && ((self.joyp >> 4) & 0x1 == 1) { // SELECT
+                        buttons_pressed = match self.keypress {
+                            5 => buttons_pressed & !(1 << 0), // A
+                            6 => buttons_pressed & !(1 << 1), // B
+                            7 => buttons_pressed & !(1 << 3), // START
+                            8 => buttons_pressed & !(1 << 2), // SELECT 
+                            _ => 0xF
+                        };
+                    }
+    
+                    return buttons_pressed
                 }
-
-                return buttons_pressed
+                return 0xF;
             }
-            return 0xF;
+            _ => self.memory[addr as usize]
         }
-
-        self.memory[addr as usize]
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        if self.flat_ram {
+        if self.flat_ram { // just treats memory as flat 64 kb for testing! (specifically jsmoo)
             self.memory[addr as usize] = val;
             return
         }
 
-        if addr >= 0x8000 && addr <= 0x9FFF {
-            self.ppu.write_vram(addr - 0x8000, val);
-            return
+        match addr {
+            0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val),
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr - 0xFE00, val),
+            0xFF04..=0xFF07 => self.timer.write_registers(addr, val),
+            0xFF46 => self.oam_dma_transfer((val as u16) << 8),
+            0xFF40..=0xFF4B => self.ppu.write_registers(addr, val),
+            0xFF50 => self.boot_rom_mounted = false,
+            0xFFFF => self.IE = val,
+            0xFF0F => self.IF = val,
+            0xFF00 => self.joyp = val,
+            _ => self.memory[addr as usize] = val
         }
-
-        if addr >= 0xFE00 && addr <= 0xFE9F {
-            self.ppu.write_oam(addr - 0xFE00, val);
-            return
-        }
-
-        if addr == 0xFF04 {
-            self.timer.sysclock = 0x0;
-            return
-        }
-
-        if addr == 0xFF05 {
-            self.timer.tima = val;
-            return
-        }
-
-        if addr == 0xFF06 {
-            self.timer.tma_previous.get_or_insert(self.timer.tma);
-            self.timer.tma = val;
-            return
-        }
-
-        if addr == 0xFF07 {
-            self.timer.tac = val;
-            return
-        }
-
-        if addr == 0xFF40 {
-            self.ppu.control = val;
-            if self.ppu.control >> 7 & 0x1 == 0 { // if LCD is switched off
-                self.ppu.stat &= 0b11111100; // reset stat mode to 0
-                self.ppu.ly = 0;
-            }
-            return
-        }
-
-        if addr == 0xFF41 {
-            self.ppu.stat = val;
-            return
-        }
-
-        if addr == 0xFF42 {
-            self.ppu.scy = val;
-            return
-        }
-
-        if addr == 0xFF43 {
-            self.ppu.scx = val;
-            return;
-        }
-
-        if addr == 0xFF45 {
-            self.ppu.lyc = val;
-            return
-        }
-
-        if addr == 0xFF50 {
-            self.boot_rom_mounted = false;
-            return
-        }
-
-        if addr == 0xFF4A {
-            self.ppu.wy = val;
-            return
-        }
-
-        if addr == 0xFF4B {
-            self.ppu.wx = val;
-            return
-        }
-
-        if addr == 0xFFFF {
-            self.inte = val;
-            return
-        }
-
-        if addr == 0xFF0F {
-            self.intf = val;
-            return
-        }
-
-        if addr == 0xFF00 {
-            self.joyp = val;
-            return
-        }
-
-        if addr == 0xFF46 {
-            self.oam_dma_transfer((val as u16) << 8);
-            return;
-        }
-
-        if addr == 0xFF47 { 
-            self.ppu.bgp = val;
-            return
-        }
-
-        if addr == 0xFF48 {
-            self.ppu.obp0 = val;
-            return
-        }
-
-        if addr == 0xFF49 {
-            self.ppu.obp1 = val;
-            return
-        }
-
-        self.memory[addr as usize] = val
     }
 
     pub fn update_requested_interrupts(&mut self) {
@@ -242,17 +129,17 @@ impl Memory {
             self.ppu.stat_irq_triggered = true;
         }
 
-        if self.timer.tima_irq > 0 {
+        if self.timer.tima_irq > 0 { // starts at 2 to delay 1 cycle
             self.timer.tima_irq -= 1;
-            if self.timer.tima_irq == 0 {
+            if self.timer.tima_irq == 0 { 
                 requests |= 0b00000100; // TIMER interrupt
             }
         }
 
-        self.intf |= requests;
+        self.IF |= requests;
     }
 
-    pub fn update_components(&mut self) {
+    pub fn update_components(&mut self) { // 1 cycle
         self.ppu.update();
         self.timer.update();
     }
@@ -265,14 +152,13 @@ impl Memory {
 impl Default for Memory {
     fn default() -> Self {
         Self {
-            debug: false,
             memory: [0x0; 0x10000],
             boot_rom: [0x0; 0x100],
             boot_rom_mounted: false,
             catridge_mounted: false,
             ppu: PPU::default(),
-            inte: 0x0,
-            intf: 0x0,
+            IE: 0x0,
+            IF: 0x0,
             joyp: 0x0,
             keypress: -1,
             timer: Timer::default(),

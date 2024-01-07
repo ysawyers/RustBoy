@@ -268,18 +268,18 @@ impl CPU {
             _ => panic!("Unexpected opcode encountered")
         };
 
-        if !self.bus.boot_rom_mounted && self.bus.debug {
-            let line = format!("{} ~ PC: ${:04X} IF: 0x{:08b} IE: 0x{:08b} IME: {}", instruction.name, self.pc - 1, self.bus.intf, self.bus.inte, self.ime);
-            let mut file = OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open("output.txt")
-                .unwrap();
+        // if !self.bus.boot_rom_mounted && self.bus.debug {
+        //     let line = format!("{} ~ PC: ${:04X} IF: 0x{:08b} IE: 0x{:08b} IME: {}", instruction.name, self.pc - 1, self.bus.IF, self.bus.IE, self.ime);
+        //     let mut file = OpenOptions::new()
+        //         .write(true)
+        //         .append(true)
+        //         .open("output.txt")
+        //         .unwrap();
 
-            if let Err(e) = writeln!(file, "{}", line) {
-                eprintln!("Couldn't write to file: {}", e);
-            }
-        }
+        //     if let Err(e) = writeln!(file, "{}", line) {
+        //         eprintln!("Couldn't write to file: {}", e);
+        //     }
+        // }
 
         return instruction.steps
     }

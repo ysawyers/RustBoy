@@ -73,6 +73,47 @@ struct RenderedObject {
 }
 
 impl PPU {
+    pub fn read_registers(&self, addr: u16) -> u8 {
+        match addr {
+            0xFF40 => self.control,
+            0xFF41 => self.stat,
+            0xFF42 => self.scy,
+            0xFF43 => self.scx,
+            0xFF44 => self.ly,
+            0xFF45 => self.lyc,
+            0xFF47 => self.bgp,
+            0xFF48 => self.obp0,
+            0xFF49 => self.obp1,
+            0xFF4A => self.wy,
+            0xFF4B => self.wx,
+            _ => panic!("recieved invalid address")
+        }
+    }
+
+    pub fn write_registers(&mut self, addr: u16, val: u8) {
+        match addr {
+            0xFF40 => {
+                self.control = val;
+                if self.control >> 7 & 0x1 == 0 { // if LCD is switched off
+                    self.stat &= 0b11111100; // reset stat mode to 0
+                    self.ly = 0;
+                }
+                return
+            },
+            0xFF41 => self.stat = val,
+            0xFF42 => self.scy = val,
+            0xFF43 => self.scx = val,
+            0xFF45 => self.lyc = val,
+            0xFF47 => self.bgp = val,
+            0xFF48 => self.obp0 = val,
+            0xFF49 => self.obp1 = val, 
+            0xFF4A => self.wy = val,
+            0xFF4B => self.wx = val,
+
+            _ => panic!("recieved invalid address")
+        };
+    }
+
     fn get_mode(&self) -> Mode {
         match self.stat & 0x3 {
             0 => Mode::HBLANK,

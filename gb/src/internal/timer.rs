@@ -1,16 +1,39 @@
 pub struct Timer {
-    pub sysclock: u16,
-    pub tma: u8,
-    pub tma_previous: Option<u8>,
-    pub tima: u8,
-    pub tac: u8,
-    pub tima_irq: usize,
+    pub tima_irq: usize, // set if IRQ should be dispatched
 
+    sysclock: u16,
     sysclock_cycles: usize,
-    current_freq: u16
+    tma: u8,
+    tma_previous: Option<u8>, // used for writes and TIMA overflows in the same cycle
+    tima: u8,
+    tac: u8,
+    current_freq: u16 // sysclock frequency specified by TAC
 }
 
 impl Timer {
+    pub fn read_registers(&self, addr: u16) -> u8 {
+        match addr {
+            0xFF04 => (self.sysclock >> 8) as u8, // div is top 8 bits of sysclock
+            0xFF05 => self.tima,
+            0xFF06 => self.tma,
+            0xFF07 => self.tac,
+            _ => panic!("recieved invalid address")
+        }
+    }
+
+    pub fn write_registers(&mut self, addr: u16, val: u8) {
+        match addr {
+            0xFF04 => self.sysclock = 0x0,
+            0xFF05 => self.tima = val,
+            0xFF06 => {
+                self.tma_previous.get_or_insert(self.tma);
+                self.tma = val;
+            },
+            0xFF07 => self.tac = val,
+            _ => panic!("recieved invalid address")
+        };
+    }
+
     pub fn update(&mut self) {
         self.sysclock_cycles += 4;
 
