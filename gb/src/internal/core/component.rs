@@ -7,7 +7,7 @@ pub struct CPU {
     pub pc: u16,
     pub sp: u16,
     pub bus: Memory,
-    ime: bool,
+    pub ime: bool,
     should_enable_ime: usize,
     tick_state: Option<TickState>,
     interrupt_tick_state: Option<InterruptTickState>,
@@ -155,11 +155,12 @@ pub enum Byte {
     LSB, MSB
 }
 
+// if !self.halt_bug { self.pc = self.pc.wrapping_add(1) } else { self.halt_bug = false }
+
 impl CPU {
     fn fetch_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
-        self.pc += 1; // halt bug?
-        //if !self.halt_bug { self.pc = self.pc.wrapping_add(1) } else { self.halt_bug = false }
+        self.pc += 1;
 
         (opcode, self.decode_instr(opcode))
     }
@@ -807,10 +808,7 @@ impl CPU {
             },
             4 => {
                 match state.interrupt {
-                    Interrupt::VBLANK => {
-                        println!("did interrupt");
-                        self.pc = 0x0040;
-                    },
+                    Interrupt::VBLANK => self.pc = 0x0040,
                     Interrupt::STAT => self.pc = 0x0048,
                     Interrupt::TIMER => self.pc = 0x0050
                 }
@@ -895,93 +893,140 @@ mod tests {
         ram: Vec<[usize; 2]>
     }
 
+    // #[test]
+    // fn jsmoo_sm83_cpu_tests() {
+    //     let files = fs::read_dir("./tests/jsmoo").unwrap();
+
+    //     for file in files {
+    //         let file_os_string = file.as_ref().unwrap().file_name();
+    //         let file_string_split = file_os_string.to_str().unwrap().split(".");
+    //         let file_parts: Vec<_> = file_string_split.collect();
+        
+    //         let body = fs::read_to_string(String::from("tests/jsmoo/") + file_parts[0] + ".json").expect("File not found!");
+        
+    //         let mut lines_passed = 0;
+
+    //         let json_tests: Vec<JsmooTestObject> = serde_json::from_str(&body).expect("JSON was not well-formatted");
+    //         for test in json_tests {
+    //             let mut cpu = CPU::default();
+    //             cpu.bus.flat_ram = true;
+
+    //             cpu.registers[Register::A] = test.initial.a;
+    //             cpu.registers[Register::B] = test.initial.b;
+    //             cpu.registers[Register::C] = test.initial.c;
+    //             cpu.registers[Register::D] = test.initial.d;
+    //             cpu.registers[Register::E] = test.initial.e;
+    //             cpu.registers[Register::F] = test.initial.f;
+    //             cpu.registers[Register::H] = test.initial.h;
+    //             cpu.registers[Register::L] = test.initial.l;
+
+    //             cpu.pc = test.initial.pc;
+    //             cpu.sp = test.initial.sp;
+
+    //             for loc in test.initial.ram {
+    //                 cpu.bus.write(loc[0] as u16, loc[1] as u8);
+    //             }
+
+    //             let mut prefixed = false;
+    //             let mut opcode_str = file_parts[0];
+    //             if opcode_str.len() == 5 {
+    //                 let parts = opcode_str.split(" ");
+    //                 let parts_vec: Vec<_> = parts.collect();
+    //                 opcode_str = parts_vec[1];
+    //                 prefixed = true;
+    //             }
+
+    //             let opcode = u8::from_str_radix(opcode_str, 16);
+    //             let opcode_num = opcode.unwrap();
+    //             let steps = if prefixed {
+    //                 cpu.fetch_instr();
+    //                 cpu.fetch_prefix_instr();
+    //                 cpu.decode_prefix_instr(opcode_num)
+    //             } else { 
+    //                 cpu.fetch_instr();
+    //                 cpu.decode_instr(opcode_num)
+    //             };
+
+    //             cpu.tick_state.get_or_insert(TickState{
+    //                 instr: steps.clone(),
+    //                 step: 0,
+    //                 is_prefix: false,
+    //                 b8: 0,
+    //                 b16: 0
+    //             });
+
+    //             let mut steps = if prefixed { 1 } else { 0 };
+    //             while !cpu.tick_state.is_none() {
+    //                 steps += 1;
+    //                 cpu.execute();
+    //             }
+
+    //             if opcode_num != 0x76 && opcode_num != 0x10 {
+    //                 assert_eq!(steps, test.cycles.len(), "Failed instruction {}", test.name);
+    //             }
+
+    //             for mem in test.r#final.ram {
+    //                 assert_eq!(cpu.bus.read(mem[0] as u16), mem[1] as u8, "Failed instruction {}", test.name);
+    //             }
+
+    //             let expected_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
+    //             test.r#final.a, test.r#final.b, test.r#final.c, test.r#final.d, test.r#final.e, test.r#final.f, 
+    //             test.r#final.h, test.r#final.l, test.r#final.pc, test.r#final.sp);
+
+    //             let recieved_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
+    //             cpu.registers[Register::A], cpu.registers[Register::B], cpu.registers[Register::C], cpu.registers[Register::D], cpu.registers[Register::E], cpu.registers[Register::F], 
+    //             cpu.registers[Register::H], cpu.registers[Register::L], cpu.pc, cpu.sp);
+
+    //             assert_eq!(recieved_state, expected_state, "Failed instruction {}", test.name);
+                
+    //             lines_passed += 1;
+    //         }
+    //     }
+    // }
+
     #[test]
-    fn jsmoo_v1_cpu_tests() {
-        let files = fs::read_dir("./tests/v1").unwrap();
+    fn blargg_cpu_instr_tests() {
+        let files = fs::read_dir("./tests/blargg/roms").unwrap();
 
         for file in files {
             let file_os_string = file.as_ref().unwrap().file_name();
             let file_string_split = file_os_string.to_str().unwrap().split(".");
             let file_parts: Vec<_> = file_string_split.collect();
-        
-            let body = fs::read_to_string(String::from("tests/v1/") + file_parts[0] + ".json").expect("File not found!");
-        
-            let mut lines_passed = 0;
+            
+            let cartridge = fs::read(String::from("./tests/blargg/roms/") + file.as_ref().unwrap().file_name().to_str().unwrap()).expect("File not found!");
 
-            let json_tests: Vec<JsmooTestObject> = serde_json::from_str(&body).expect("JSON was not well-formatted");
-            for test in json_tests {
-                let mut cpu = CPU::default();
-                cpu.bus.flat_ram = true;
+            let mut core = CPU::default();
+            core.bus.debug = true; // return 0x90 for LY register
+            core.bus.load_cartridge(cartridge);
 
-                cpu.registers[Register::A] = test.initial.a;
-                cpu.registers[Register::B] = test.initial.b;
-                cpu.registers[Register::C] = test.initial.c;
-                cpu.registers[Register::D] = test.initial.d;
-                cpu.registers[Register::E] = test.initial.e;
-                cpu.registers[Register::F] = test.initial.f;
-                cpu.registers[Register::H] = test.initial.h;
-                cpu.registers[Register::L] = test.initial.l;
+            core.pc = 0x101;
+            core.sp = 0xFFFE;
+            
+            core.registers[Register::A] = 0x01;
+            core.registers[Register::F] = 0xB0;
+            core.registers[Register::B] = 0x00;
+            core.registers[Register::C] = 0x13;
+            core.registers[Register::D] = 0x00;
+            core.registers[Register::E] = 0xD8;
+            core.registers[Register::H] = 0x01;
+            core.registers[Register::L] = 0x4D;
 
-                cpu.pc = test.initial.pc;
-                cpu.sp = test.initial.sp;
+            let body = fs::read_to_string(String::from("./tests/blargg/logs/") + file_parts[0] + ".txt").expect("File not found!");
 
-                for loc in test.initial.ram {
-                    cpu.bus.write(loc[0] as u16, loc[1] as u8);
+            for line in body.lines() {
+                let core_state = format!(
+                    "A: {:02X} F: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} H: {:02X} L: {:02X} SP: {:04X} PC: 00:{:04X} ({:02X} {:02X} {:02X} {:02X})",
+                    core.registers[Register::A], core.registers[Register::F], core.registers[Register::B], core.registers[Register::C], core.registers[Register::D], 
+                    core.registers[Register::E], core.registers[Register::H], core.registers[Register::L], core.sp, core.pc, 
+                    core.bus.read(core.pc), core.bus.read(core.pc+1), core.bus.read(core.pc+2), core.bus.read(core.pc+3)
+                );
+
+                assert_eq!(core_state, line);
+
+                core.next_frame(1, -1);
+                while !core.tick_state.is_none() || !core.interrupt_tick_state.is_none() {
+                    core.next_frame(1, -1);
                 }
-
-                let mut prefixed = false;
-                let mut opcode_str = file_parts[0];
-                if opcode_str.len() == 5 {
-                    let parts = opcode_str.split(" ");
-                    let parts_vec: Vec<_> = parts.collect();
-                    opcode_str = parts_vec[1];
-                    prefixed = true;
-                }
-
-                let opcode = u8::from_str_radix(opcode_str, 16);
-                let opcode_num = opcode.unwrap();
-                let steps = if prefixed {
-                    cpu.fetch_instr();
-                    cpu.fetch_prefix_instr();
-                    cpu.decode_prefix_instr(opcode_num)
-                } else { 
-                    cpu.fetch_instr();
-                    cpu.decode_instr(opcode_num)
-                };
-
-                cpu.tick_state.get_or_insert(TickState{
-                    instr: steps.clone(),
-                    step: 0,
-                    is_prefix: false,
-                    b8: 0,
-                    b16: 0
-                });
-
-                let mut steps = if prefixed { 1 } else { 0 };
-                while !cpu.tick_state.is_none() {
-                    steps += 1;
-                    cpu.execute();
-                }
-
-                if opcode_num != 0x76 && opcode_num != 0x10 {
-                    assert_eq!(steps, test.cycles.len(), "Failed instruction {}", test.name);
-                }
-
-                for mem in test.r#final.ram {
-                    assert_eq!(cpu.bus.read(mem[0] as u16), mem[1] as u8, "Failed instruction {}", test.name);
-                }
-
-                let expected_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
-                test.r#final.a, test.r#final.b, test.r#final.c, test.r#final.d, test.r#final.e, test.r#final.f, 
-                test.r#final.h, test.r#final.l, test.r#final.pc, test.r#final.sp);
-
-                let recieved_state = format!("A: {:02X} B: {:02X} C: {:02X} D: {:02X} E: {:02X} F: {:02X} H: {:02X} L: {:02X} PC: {:04X} SP: {:04X}",
-                cpu.registers[Register::A], cpu.registers[Register::B], cpu.registers[Register::C], cpu.registers[Register::D], cpu.registers[Register::E], cpu.registers[Register::F], 
-                cpu.registers[Register::H], cpu.registers[Register::L], cpu.pc, cpu.sp);
-
-                assert_eq!(recieved_state, expected_state, "Failed instruction {}", test.name);
-                
-                lines_passed += 1;
             }
         }
     }

@@ -1,5 +1,7 @@
 use crate::internal::core::component::{MicroInstr, Byte, CPU, Instruction};
 use crate::internal::core::registers::{Register, Flag};
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 
 impl CPU {
     pub fn decode_instr(&self, opcode: u8) -> Vec<MicroInstr> {
@@ -266,8 +268,17 @@ impl CPU {
             _ => panic!("Unexpected opcode encountered")
         };
 
-        if !self.bus.boot_rom_mounted {
-            println!("{} ~ PC: ${:04X}", instruction.name, self.pc - 1);
+        if !self.bus.boot_rom_mounted && self.bus.debug {
+            let line = format!("{} ~ PC: ${:04X} IF: 0x{:08b} IE: 0x{:08b} IME: {}", instruction.name, self.pc - 1, self.bus.intf, self.bus.inte, self.ime);
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open("output.txt")
+                .unwrap();
+
+            if let Err(e) = writeln!(file, "{}", line) {
+                eprintln!("Couldn't write to file: {}", e);
+            }
         }
 
         return instruction.steps

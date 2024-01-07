@@ -7,7 +7,7 @@ pub struct Timer {
     pub tima_irq: usize,
 
     sysclock_cycles: usize,
-    current_freq: u16
+    pub current_freq: u16
 }
 
 impl Timer {
@@ -25,7 +25,7 @@ impl Timer {
                 _ => panic!()
             };
 
-            if bit_set_prev == 1 && self.current_freq == 0 {
+            if bit_set_prev == 0 && self.current_freq == 1 {
                 let result = self.tima.overflowing_add(1);
                 if result.1 {
                     self.tima = if self.tma_previous.is_none() { self.tma } else { self.tma_previous.unwrap() };

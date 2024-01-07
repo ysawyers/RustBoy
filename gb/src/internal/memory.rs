@@ -104,9 +104,6 @@ impl Memory {
             return 0xF;
         }
 
-        if addr >= 0xE000 && addr <= 0xFDFF { return 0xFF } // prohibited
-        if addr >= 0xFEA0 && addr <= 0xFEFF { return 0xFF } // prohibited
-
         self.memory[addr as usize]
     }
 
@@ -127,7 +124,9 @@ impl Memory {
         }
 
         if addr == 0xFF04 {
-            // TODO
+            // if self.timer.tac >> 2 & 0x1 == 0 && self.timer.current_freq == 1 {
+            //     panic!("Obscure behavior");
+            // }
             self.timer.sysclock = 0x0;
             return
         }
@@ -152,6 +151,7 @@ impl Memory {
             self.ppu.control = val;
             if self.ppu.control >> 7 & 0x1 == 0 { // if LCD is switched off
                 self.ppu.stat &= 0b11111100; // reset stat mode to 0
+                self.ppu.ly = 0;
             }
             return
         }
@@ -225,9 +225,6 @@ impl Memory {
             self.ppu.obp1 = val;
             return
         }
-
-        if addr >= 0xE000 && addr <= 0xFDFF { return } // prohibited
-        if addr >= 0xFEA0 && addr <= 0xFEFF { return } // prohibited
 
         self.memory[addr as usize] = val
     }
