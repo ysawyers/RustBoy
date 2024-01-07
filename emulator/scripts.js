@@ -97,10 +97,10 @@ window.addEventListener("keydown", (e) => {
     case "KeyW": // B
       currentKeyPressed = 6;
       break;
-    case "KeyA": // START
+    case "Enter": // START
       currentKeyPressed = 7;
       break;
-    case "KeyS": // SELECT
+    case "Escape": // SELECT
       currentKeyPressed = 8;
       break;
     default:
