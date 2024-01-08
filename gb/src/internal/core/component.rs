@@ -1,5 +1,5 @@
 use crate::internal::ppu::Display;
-use crate ::internal::memory::component::Memory;
+use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
 
 pub struct CPU {
