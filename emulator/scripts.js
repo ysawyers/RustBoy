@@ -26,7 +26,8 @@ class Gameboy extends Display {
   constructor(canvas, currentGame, canvasScale) {
     super(canvas, currentGame, canvasScale);
     super.changeCanvasDimensions(160, 144);
-    this.colorPallete = ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"];
+    this.colorPallete = ["#FFFFFF", "#AAAAAA", "#555555", "#000000"];
+    // ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"]
   }
 
   run(cartridge) {

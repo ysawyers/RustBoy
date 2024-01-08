@@ -361,7 +361,7 @@ impl PPU {
                 if !sprite_fetching {
                     for _ in 0..2 { // draws 1 pixel per dot
                         if self.background_fifo.len() > 8 {
-                            if self.tick_state.scanline_x == 0 { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD ** A BIT INACCURATE EACH REMOVAL SHOULD BE A CYCLE
+                            if (self.tick_state.scanline_x == 0) && !self.rendered_window_on_scanline { // at the start of each scanline discard SCX mod 8 pixels from FIFO and push the rest to LCD ** A BIT INACCURATE EACH REMOVAL SHOULD BE A CYCLE
                                 for _ in 0..(self.scx % 8) {
                                     self.background_fifo.remove(0);
                                 }
