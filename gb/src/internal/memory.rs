@@ -66,9 +66,7 @@ impl Memory {
         match self.rom_chip[0x0147] {
             0x00 => { // No MBC
                 self.memory_bank = MemoryBank::MBCNONE;
-                for i in 0..self.rom_chip.len() {    
-                    self.write(i as u16, self.rom_chip[i]);
-                }
+                self.rom_chip.resize(0x10000, 0x00);
             },
             0x01..=0x03 => { // MBC1
                 self.memory_bank = MemoryBank::MBC1;
@@ -89,8 +87,6 @@ impl Memory {
                         logo_ptr = (Memory::NINTENDO_LOGO.len() - 1) as i8;
                     }
                 }
-
-                // self.mbc1_ram_bank_swap();
             }
             _ => {
                 console_log!("0x{:02X}", self.rom_chip[0x0147]);
@@ -101,15 +97,11 @@ impl Memory {
 
     fn oam_dma_transfer(&mut self, source: u16) {
         for i in 0..0xA0 {
-            self.ppu.oam[i] = self.memory[(source as usize) + i];
+            self.ppu.oam[i] = self.rom_chip[((source as usize) + i) + 0x4000];
         }
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        if self.flat_ram { // just treats memory as flat 64 kb for testing! (specifically jsmoo)
-            return self.memory[addr as usize];
-        }
-
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
         }
@@ -119,18 +111,22 @@ impl Memory {
                 let offset = if self.banking_mode == BankingMode::ADVANCED { ((self.ram_rom_bank_number as u32) << 19) | ((addr as u32) & 0x3FFF) } else { addr as u32 };
                 return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
             },
-            0x4000..=0x7000 => {
-                let adjusted_bank_number = if self.rom_bank_number == 0x00 { 0x01 } else { self.rom_bank_number };
-                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((adjusted_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+            0x4000..=0x7FFF => {
+                let mut translated_bank_number = self.rom_bank_number & 0x1F;
+                if translated_bank_number == 0x00 {
+                    translated_bank_number |= 0x1;
+                }
+                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((translated_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
                 return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
+            },
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    // TODO
+                }
+                return 0xFF
             },
             0x8000..=0x9FFF => self.ppu.read_vram(addr - 0x8000),
             0xFE00..=0xFE9F => self.ppu.read_oam(addr - 0xFE00),
-            0xFF01 => 0xFF, // some serial register not implemented.
-            0xFF04..=0xFF07 => self.timer.read_registers(addr),
-            0xFF40..=0xFF4B => self.ppu.read_registers(addr),
-            0xFF0F => self.IF,
-            0xFFFF => self.IE,
             0xFF00 => {
                 if self.keypress != -1 {
                     let mut buttons_pressed = 0xF;
@@ -152,57 +148,60 @@ impl Memory {
                             _ => 0xF
                         };
                     }
-    
                     return buttons_pressed
                 }
                 return 0xF;
             }
-            _ => self.memory[addr as usize]
+            0xFF01 => 0xFF, // some serial register not implemented.
+            0xFF04..=0xFF07 => self.timer.read_registers(addr),
+            0xFF0F => self.IF,
+            0xFF40..=0xFF4B => self.ppu.read_registers(addr),
+            0xFFFF => self.IE,
+
+            _ => self.rom_chip[(addr as usize) + 0x4000]
         }
     }
 
-    fn mbc_registers(&mut self, addr: u16, val: u8) {
+    fn mbc_handler(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x1FFF =>  self.mbc_ram_enabled = val & 0xF == 0xA,
+            0x0000..=0x1FFF => self.mbc_ram_enabled = val & 0xF == 0xA,
             0x2000..=0x3FFF => self.rom_bank_number = val & 0x1F,
-            0x4000..=0x5FFF => {
-                self.ram_rom_bank_number = val & 0x3;
-                // self.mbc1_ram_bank_swap();
-            },
-            0x6000..=0x7FFF => {
-                self.banking_mode = if val & 0x1 == 1 { BankingMode::ADVANCED } else { BankingMode::SIMPLE };
-                // self.mbc1_ram_bank_swap();
-            },
+            0x4000..=0x5FFF => self.ram_rom_bank_number = val & 0x3,
+            0x6000..=0x7FFF => self.banking_mode = if val & 0x1 == 1 { BankingMode::ADVANCED } else { BankingMode::SIMPLE },
             _ => ()
         }
     }
 
-    pub fn write(&mut self, addr: u16, val: u8) {
-        if self.flat_ram { // just treats memory as flat 64 kb for testing! (specifically jsmoo)
-            self.memory[addr as usize] = val;
-            return
-        }
+    // let rom_length = self.rom_chip.len() - 1;
+    // let offset = if self.banking_mode == BankingMode::ADVANCED { (self.ram_rom_bank_number as u16) << 13 } else { 0 } | (addr & 0x1FFF);
+    // self.rom_chip[(offset as usize) & rom_length] = val;
 
+    pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x7FFF => {
-                if self.memory_bank != MemoryBank::MBCNONE {
-                    self.mbc_registers(addr, val);
-                } else if self.boot_rom_mounted { // loading catridge into memory so writes to ROM at this point is allowed.
-                    self.memory[addr as usize] = val
-                } else {
-                    panic!("attempting to write to ROM.")
+            0x0000..=0x7FFF => self.mbc_handler(addr, val),
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    // TODO
                 }
-            },
-            0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val),
-            0xFE00..=0xFE9F => self.ppu.write_oam(addr - 0xFE00, val),
+            }
+            0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val), // 8 KiB Video RAM (VRAM)
+            0xC000..=0xCFFF => self.rom_chip[(addr as usize) + 0x4000] = val, // 4 KiB Work RAM (WRAM)
+            0xD000..=0xDFFF => self.rom_chip[(addr as usize) + 0x4000] = val, // 4 KiB Work RAM (WRAM) In CGB mode, switchable bank 1~7
+            0xFE00..=0xFE9F => self.ppu.write_oam(addr - 0xFE00, val), // Object attribute memory (OAM)
+            0xFF00 => self.joyp = val,
             0xFF04..=0xFF07 => self.timer.write_registers(addr, val),
+            0xFF0F => self.IF = val,
             0xFF46 => self.oam_dma_transfer((val as u16) << 8),
             0xFF40..=0xFF4B => self.ppu.write_registers(addr, val),
-            0xFF50 => self.boot_rom_mounted = false,
+            0xFF50 => {
+                if val & 0x1 == 1 { // bit 0 must be explicitly set to unmap the bootrom
+                    self.boot_rom_mounted = false
+                }
+            },
+            0xFF80..=0xFFFE => self.rom_chip[(addr as usize) + 0x4000] = val, // High RAM (HRAM)
             0xFFFF => self.IE = val,
-            0xFF0F => self.IF = val,
-            0xFF00 => self.joyp = val,
-            _ => self.memory[addr as usize] = val
+
+            _ => ()
         }
     }
 
