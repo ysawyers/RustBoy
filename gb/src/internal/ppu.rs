@@ -374,7 +374,7 @@ impl PPU {
                                 let sprite = self.sprite_fifo.remove(0);
                                 let sprite_color_value = self.get_object_color((sprite.flags >> 4) & 0x1, sprite.color_id);    
 
-                                if sprite_color_value == 0 { // sprite is transparent so background is visible
+                                if sprite.color_id == 0x00 { // sprite is transparent so background is visible
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
                                 } else if (sprite.flags >> 7) & 0x1 == 1 && bg_color_value != 0 { // background has priority and isn't transparent
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
