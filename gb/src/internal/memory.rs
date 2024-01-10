@@ -1,4 +1,3 @@
-use crate::{console_log, log};
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 
@@ -81,8 +80,7 @@ impl Memory {
                 for i in (0x4000..0x8000).rev() {
                     if logo_ptr < 0 {
                         self.memory_bank = MemoryBank::MBC1M;
-                        console_log!("FOUND MBC1M");
-                        unimplemented!("not implemented yet!");
+                        panic!("not implemented MBC1M yet!");
                     }
 
                     let bank_ten_ptr = ((0x10 as u32) << 14) | (i & 0x3FFF);
@@ -94,13 +92,8 @@ impl Memory {
                     }
                 }
             },
-            0x0F..=0x13 => {
-                self.memory_bank = MemoryBank::MBC3;
-            }
-            _ => {
-                console_log!("0x{:02X}", self.rom_chip[MBC_TYPE]);
-                unimplemented!("MBC NOT IMPLEMENTED YET!")
-            }
+            0x0F..=0x13 => self.memory_bank = MemoryBank::MBC3,
+            _ => panic!("MBC NOT IMPLEMENTED YET! 0x{:02X}", self.rom_chip[MBC_TYPE])
         };
     }
 
@@ -170,14 +163,14 @@ impl Memory {
             0x0000..=0x7FFF => {
                 if self.memory_bank == MemoryBank::MBC1 {
                     self.mbc1_write(addr, val)
-                } else {
+                } else if self.memory_bank == MemoryBank::MBC3 {
                     self.mbc3_write(addr, val)
                 }
             },
             0xA000..=0xBFFF => {
                 if self.memory_bank == MemoryBank::MBC1 {
                     self.mbc1_write(addr, val)
-                } else {
+                } else if self.memory_bank == MemoryBank::MBC3 {
                     self.mbc3_write(addr, val)
                 }
             },
@@ -282,6 +275,11 @@ impl Memory {
                 _ => ()
             },
             0x6000..=0x7FFF => (), // ? RTC stuff
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    // TODO
+                }
+            }
 
             _ => panic!("should not have recieved values outside of this region.")
         }

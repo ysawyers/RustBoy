@@ -1,5 +1,7 @@
 use wasm_bindgen::prelude::*;
 use crate::internal::core::component::CPU;
+extern crate console_error_panic_hook;
+use std::panic;
 
 mod internal;
 
@@ -38,6 +40,7 @@ struct Emulator {
 #[wasm_bindgen]
 impl Emulator {
     pub fn new() -> Emulator {   
+        console_error_panic_hook::set_once();
         Emulator {
             core: CPU::default()
         }

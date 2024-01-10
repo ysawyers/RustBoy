@@ -44,6 +44,33 @@ class Gameboy extends Display {
         let canvasScale = this.canvasScale;
         let currentGame;
 
+        var fps = 65;
+        var now;
+        var then = Date.now();
+        var interval = 1000 / fps;
+        var delta;
+
+        // function animate() {
+        //   now = Date.now();
+        //   delta = now - then;
+
+        //   if (delta > interval) {
+        //     then = now - (delta % interval);
+
+        //     let start = new Date();
+        //     let display = emulator.render(currentKeyPressed);
+        //     console.log(`frame took ${new Date() - start}ms to render.`);
+        //     for (let row = 0; row < 144; row++) {
+        //       for (let col = 0; col < 160; col++) {
+        //         ctx.fillStyle = colorPallete[display[row * 160 + col]];
+        //         ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
+        //       }
+        //     }
+        //   }
+
+        //   currentGame = requestAnimationFrame(animate);
+        // }
+
         function animate() {
           let display = emulator.render(currentKeyPressed);
           for (let row = 0; row < 144; row++) {

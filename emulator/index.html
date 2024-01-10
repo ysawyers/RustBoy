@@ -18,7 +18,7 @@
   </head>
   <body>
     <div style="width: 100vw; height: 100vh; display: flex; justify-content: center">
-      <div style="margin-top: 2em">
+      <div style="margin-top: 1em">
         <div style="display: flex; flex-direction: row">
           <canvas id="emulator" width="800" height="600"></canvas>
           <div style="margin-left: 20px">
@@ -49,6 +49,10 @@
                 <option value="POKEMON.gb">POKEMON</option>
 
                 <option value="MULTICART.gb">MULTICART</option>
+
+                <option value="DIV.gb">DIV</option>
+                <option value="TIM0.gb">TIM0</option>
+                <option value="TIM0TRIGGER.gb">TIM0TRGG</option>
               </select>
             </div>
           </div>
@@ -59,7 +63,11 @@
         <div style="width: 470px; border: 3px solid black; padding: 5px">
           <p style="margin-bottom: 2px"><strong>d-pad:</strong> arrow keys</p>
           <p style="margin-bottom: 2px"><strong>start:</strong> enter</p>
-          <p><strong>select:</strong> escape</p>
+          <p style="margin-bottom: 2px"><strong>select:</strong> escape</p>
+          <div style="display: flex; margin-top: 10px">
+            <p style="margin-bottom: 2px"><strong>A:</strong> Q</p>
+            <p style="margin-left: 10px"><strong>B:</strong> W</p>
+          </div>
         </div>
       </div>
     </div>

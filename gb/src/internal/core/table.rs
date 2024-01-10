@@ -1,7 +1,5 @@
 use crate::internal::core::component::{MicroInstr, Byte, CPU, Instruction};
 use crate::internal::core::registers::{Register, Flag};
-use std::fs::OpenOptions;
-use std::io::prelude::*;
 
 impl CPU {
     pub fn decode_instr(&self, opcode: u8) -> Vec<MicroInstr> {

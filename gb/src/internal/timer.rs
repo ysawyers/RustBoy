@@ -35,7 +35,7 @@ impl Timer {
     }
 
     pub fn update(&mut self) {
-        self.sysclock_cycles += 4;
+        self.sysclock += 4;
 
         if (self.tac >> 2 & 0x1) == 1 {
             let bit_set_prev = self.current_freq;
@@ -45,7 +45,7 @@ impl Timer {
                 1 => (self.sysclock >> 3) & 0x1, // 16
                 2 => (self.sysclock >> 5) & 0x1, // 64
                 3 => (self.sysclock >> 7) & 0x1, // 256
-                _ => panic!()
+                _ => unreachable!()
             };
 
             if bit_set_prev == 1 && self.current_freq == 0 {
@@ -59,10 +59,6 @@ impl Timer {
             }
         }
 
-        if self.sysclock_cycles > 0xFF {
-            self.sysclock += 1;
-            self.sysclock_cycles = 0;
-        }
         self.tma_previous = None;
     }
 }
@@ -73,10 +69,9 @@ impl Default for Timer {
             sysclock: 0x0,
             tma: 0,
             tma_previous: None,
-            tima: 0xFF,
+            tima: 0x00,
             tac: 0x0,
             tima_irq: 0,
-
             sysclock_cycles: 0,
             current_freq: 0
         }
