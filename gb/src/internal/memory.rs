@@ -22,7 +22,7 @@ pub struct Memory {
     rom_chip: Vec<u8>,
     wram: [u8; 0x2000],
     hram: [u8; 0x7F],
-    external_ram: Vec<u8>, // resize to fit all banks of cartridge (if any)
+    sram: Vec<u8>, // resize to fit all banks of cartridge (if any)
 
     boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
@@ -57,6 +57,17 @@ impl Memory {
 
     pub fn load_cartridge(&mut self, bytes: Vec<u8>) {
         self.rom_chip = bytes;
+
+        match self.rom_chip[RAM_SIZE] {
+            0x00 => (), // No RAM
+            0x01 => (), // Unused
+            0x02 => self.sram.resize(0x2000, 0x00), // 1 bank
+            0x03 => self.sram.resize(0x2000 * 4, 0x00), // 4 banks of 8 KiB each
+            0x04 => self.sram.resize(0x2000 * 16, 0x00), // 16 banks of 8 KiB each
+            0x05 => self.sram.resize(0x2000 * 8, 0x00), // 8 banks of 8 KiB each
+            _ => ()
+        }
+
         match self.rom_chip[MBC_TYPE] {
             0x00 => {
                 self.memory_bank = MemoryBank::MBCNONE;
@@ -64,19 +75,6 @@ impl Memory {
             },
             0x01..=0x03 => {
                 self.memory_bank = MemoryBank::MBC1;
-
-                // initializes external RAM if any on the cartridge
-                if self.rom_chip[MBC_TYPE] == 0x02 || self.rom_chip[MBC_TYPE] == 0x03 {
-                    match self.rom_chip[RAM_SIZE] {
-                        0x00 => (), // No RAM
-                        0x01 => (), // Unused
-                        0x02 => self.external_ram.resize(0x2000, 0x00), // 1 bank
-                        0x03 => self.external_ram.resize(0x2000 * 4, 0x00), // 4 banks of 8 KiB each
-                        0x04 => self.external_ram.resize(0x2000 * 16, 0x00), // 16 banks of 8 KiB each
-                        0x05 => self.external_ram.resize(0x2000 * 8, 0x00), // 8 banks of 8 KiB each
-                        _ => ()
-                    }
-                }
 
                 // checks if MBC1M instead
                 let mut logo_ptr = (Memory::NINTENDO_LOGO.len() - 1) as i8;
@@ -103,37 +101,14 @@ impl Memory {
         };
     }
 
-    fn oam_dma_transfer(&mut self, source: u16) {
-        for i in 0..0xA0 {
-            self.ppu.oam[i] = self.read(source + (i as u16))
-        }
-    }
-
     pub fn read(&self, addr: u16) -> u8 {
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
         }
 
         match addr {
-             /* ======== MBC1 HANDLER READ =========== */
-            0x0000..=0x3FFF => {
-                let offset = if self.banking_mode == BankingMode::ADVANCED { ((self.ram_rom_bank_number as u32) << 19) | ((addr as u32) & 0x3FFF) } else { addr as u32 };
-                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
-            },
-            0x4000..=0x7FFF => {
-                let translated_bank_number = if self.rom_bank_number == 0x00 { 0x01 } else { self.rom_bank_number };
-                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((translated_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
-                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
-            },
-            0xA000..=0xBFFF => {
-                if self.mbc_ram_enabled {
-                    let external_ram_offset = (((self.ram_rom_bank_number as u16) * 0x1FFF) + (addr & 0x1FFF)) as usize;
-                    return self.external_ram[(external_ram_offset as usize) % self.external_ram.len()];
-                }
-                return 0xFF
-            },
-            /* ======== MBC1 HANDLER READ =========== */
-
+            0x0000..=0x7FFF => self.mbc1_read(addr),
+            0xA000..=0xBFFF => self.mbc1_read(addr),
             0x8000..=0x9FFF => self.ppu.read_vram(addr - 0x8000),
             0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize], // 4 KiB Work RAM (WRAM)
             0xFE00..=0xFE9F => self.ppu.read_oam(addr - 0xFE00),
@@ -175,22 +150,8 @@ impl Memory {
 
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            /* ======== MBC1 HANDLER WRITE =========== */
-            0x0000..=0x1FFF => self.mbc_ram_enabled = val & 0xF == 0xA,
-            0x2000..=0x3FFF => self.rom_bank_number = val & 0x1F,
-            0x4000..=0x5FFF => self.ram_rom_bank_number = val & 0x3,
-            0x6000..=0x7FFF => self.banking_mode = if val & 0x1 == 1 { BankingMode::ADVANCED } else { BankingMode::SIMPLE },
-            0xA000..=0xBFFF => {
-                if self.mbc_ram_enabled {
-                    let offset: u16 = if self.banking_mode == BankingMode::ADVANCED { (self.ram_rom_bank_number as u16) << 13 } else { 0 } | (addr & 0x1FFF);
-                    let ram_bank_val = self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
-                    let external_ram_offset = (((self.ram_rom_bank_number as u16) * 0x1FFF) + (addr & 0x1FFF)) as usize;
-                    let p = self.external_ram.len();
-                    self.external_ram[(external_ram_offset as usize) % p] = ram_bank_val;
-                }
-            }
-            /* ======== MBC1 HANDLER WRITE =========== */
-
+            0x0000..=0x7FFF => self.mbc1_write(addr, val),
+            0xA000..=0xBFFF => self.mbc1_write(addr, val),
             0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val), // 8 KiB Video RAM (VRAM)
             0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize] = val, // 4 KiB Work RAM (WRAM)
             0xFE00..=0xFE9F => self.ppu.write_oam(addr - 0xFE00, val), // Object attribute memory (OAM)
@@ -208,6 +169,56 @@ impl Memory {
             0xFFFF => self.IE = val,
 
             _ => ()
+        }
+    }
+
+    fn oam_dma_transfer(&mut self, source: u16) {
+        for i in 0..0xA0 {
+            self.ppu.oam[i] = self.read(source + (i as u16))
+        }
+    }
+
+    fn mbc1_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x3FFF => {
+                let offset = if self.banking_mode == BankingMode::ADVANCED { ((self.ram_rom_bank_number as u32) << 19) | ((addr as u32) & 0x3FFF) } else { addr as u32 };
+                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
+            },
+            0x4000..=0x7FFF => {
+                let translated_bank_number = if self.rom_bank_number == 0x00 { 0x01 } else { self.rom_bank_number };
+                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((translated_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
+            },
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    let mut offset = 0;
+                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
+                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
+                    }
+                    return self.sram[(offset + (addr & 0x1FFF)) as usize];
+                }
+                return 0xFF
+            },
+            _ => panic!("should not have recieved values outside of this region.")
+        }
+    }
+
+    fn mbc1_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1FFF => self.mbc_ram_enabled = val & 0xF == 0xA,
+            0x2000..=0x3FFF => self.rom_bank_number = val & 0x1F,
+            0x4000..=0x5FFF => self.ram_rom_bank_number = val & 0x3,
+            0x6000..=0x7FFF => self.banking_mode = if val & 0x1 == 1 { BankingMode::ADVANCED } else { BankingMode::SIMPLE },
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    let mut offset = 0;
+                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
+                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
+                    }
+                    self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
+                }
+            },
+            _ => panic!("should not have recieved values outside of this region.")
         }
     }
 
@@ -267,7 +278,7 @@ impl Default for Memory {
             rom_bank_number: 0x00,
             hram: [0x0; 0x7F],
             wram: [0x0; 0x2000],
-            external_ram: vec![],
+            sram: vec![],
         }
     }
 }
