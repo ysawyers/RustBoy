@@ -12,49 +12,54 @@
       canvas {
         border: 3px solid gray;
         border-radius: 2px;
-        padding: 1px;
-        background-color: #9bbc0f;
+        background-color: lightgray;
       }
     </style>
   </head>
   <body>
     <div style="width: 100vw; height: 100vh; display: flex; justify-content: center">
       <div style="margin-top: 2em">
-        <h1>Emufun</h1>
-        <div style="margin-top: 10px; display: flex">
-          <div>
-            <canvas id="emulator" width="800" height="600"></canvas>
-          </div>
+        <div style="display: flex; flex-direction: row">
+          <canvas id="emulator" width="800" height="600"></canvas>
           <div style="margin-left: 20px">
-            <!-- <div style="width: fit-content">
+            <div style="width: fit-content">
               <p style="margin-bottom: 5px">Choose Emulator:</p>
               <select id="emulator-select" size="5">
                 <option value="gb">Game Boy</option>
               </select>
-            </div> -->
+            </div>
             <div>
               <p style="margin-bottom: 5px">Choose ROM:</p>
               <select id="rom-select-gb" size="15">
+                <option value="ZELDA.gb">ZELDA</option>
+                <option value="POKEMON.gb">POKEMON</option>
                 <option value="ROM2MB.gb">ROM2MB</option>
                 <option value="ROM4MB.gb">ROM4MB</option>
                 <option value="ROM8MB.gb">ROM8MB</option>
                 <option value="ROM16MB.gb">ROM16MB</option>
                 <option value="RAM64.gb">RAM64</option>
                 <option value="KIRBY.gb">KIRBY</option>
-                <option value="ZELDA.gb">ZELDA</option>
+
                 <option value="BOMB.gb">BOMB</option>
                 <option value="RRAM256.gb">RRAM256</option>
-                <!-- <option value="TETRIS.gb">TETRIS</option>
+                <option value="TETRIS.gb">TETRIS</option>
                 <option value="MARIO.gb">MARIO</option>
                 <option value="ASTEROID.gb">ASTEROID</option>
-                
-                
+
                 <option value="POKEMON.gb">POKEMON</option>
-               
-                <option value="MULTICART.gb">MULTICART</option> -->
+
+                <option value="MULTICART.gb">MULTICART</option>
               </select>
             </div>
           </div>
+        </div>
+        <form style="margin-bottom: 20px; margin-top: 8px">
+          <input type="file" id="myFile" name="filename" />
+        </form>
+        <div style="width: 470px; border: 3px solid black; padding: 5px">
+          <p style="margin-bottom: 2px"><strong>d-pad:</strong> arrow keys</p>
+          <p style="margin-bottom: 2px"><strong>start:</strong> enter</p>
+          <p><strong>select:</strong> escape</p>
         </div>
       </div>
     </div>

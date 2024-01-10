@@ -10,9 +10,9 @@ enum BankingMode {
     SIMPLE, ADVANCED
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum MemoryBank {
-    MBCNONE, MBC1, MBC1M
+    MBCNONE, MBC1, MBC1M, MBC3
 }
 
 pub struct Memory {
@@ -93,6 +93,9 @@ impl Memory {
                         logo_ptr = (Memory::NINTENDO_LOGO.len() - 1) as i8;
                     }
                 }
+            },
+            0x0F..=0x13 => {
+                self.memory_bank = MemoryBank::MBC3;
             }
             _ => {
                 console_log!("0x{:02X}", self.rom_chip[MBC_TYPE]);
@@ -107,8 +110,22 @@ impl Memory {
         }
 
         match addr {
-            0x0000..=0x7FFF => self.mbc1_read(addr),
-            0xA000..=0xBFFF => self.mbc1_read(addr),
+            0x0000..=0x7FFF => {
+                if self.memory_bank == MemoryBank::MBC1 {
+                    return self.mbc1_read(addr);
+                } else if self.memory_bank == MemoryBank::MBC3 {
+                    return self.mbc3_read(addr);
+                };
+                self.rom_chip[addr as usize]
+            },
+            0xA000..=0xBFFF => {
+                if self.memory_bank == MemoryBank::MBC1 {
+                    return self.mbc1_read(addr);
+                } else if self.memory_bank == MemoryBank::MBC3 {
+                    return self.mbc3_read(addr);
+                }
+                self.rom_chip[addr as usize]
+            },
             0x8000..=0x9FFF => self.ppu.read_vram(addr - 0x8000),
             0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize], // 4 KiB Work RAM (WRAM)
             0xFE00..=0xFE9F => self.ppu.read_oam(addr - 0xFE00),
@@ -150,8 +167,20 @@ impl Memory {
 
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x7FFF => self.mbc1_write(addr, val),
-            0xA000..=0xBFFF => self.mbc1_write(addr, val),
+            0x0000..=0x7FFF => {
+                if self.memory_bank == MemoryBank::MBC1 {
+                    self.mbc1_write(addr, val)
+                } else {
+                    self.mbc3_write(addr, val)
+                }
+            },
+            0xA000..=0xBFFF => {
+                if self.memory_bank == MemoryBank::MBC1 {
+                    self.mbc1_write(addr, val)
+                } else {
+                    self.mbc3_write(addr, val)
+                }
+            },
             0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val), // 8 KiB Video RAM (VRAM)
             0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize] = val, // 4 KiB Work RAM (WRAM)
             0xFE00..=0xFE9F => self.ppu.write_oam(addr - 0xFE00, val), // Object attribute memory (OAM)
@@ -199,6 +228,7 @@ impl Memory {
                 }
                 return 0xFF
             },
+
             _ => panic!("should not have recieved values outside of this region.")
         }
     }
@@ -218,6 +248,41 @@ impl Memory {
                     self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
                 }
             },
+
+            _ => panic!("should not have recieved values outside of this region.")
+        }
+    }
+
+    fn mbc3_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x3FFF => self.rom_chip[(addr & 0x3FFF) as usize],
+            0x4000..=0x7FFF => {
+                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
+            },
+            0xA000..=0xBFFF => 0x00, // RTC / RAM
+
+            _ => panic!("should not have recieved values outside of this region.")
+        }
+    }
+
+    fn mbc3_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1FFF => {
+                if val == 0x0A {
+                    self.mbc_ram_enabled = true;
+                } else if val == 0x00 {
+                    self.mbc_ram_enabled = false;
+                }
+            },
+            0x2000..=0x3FFF => self.rom_bank_number = if val == 0x00 { 0x01 } else { val & 0x7F },
+            0x4000..=0x5FFF => match val {
+                0x00..=0x03 => self.ram_rom_bank_number = val,
+                0x08..=0x0C => (), // ? RTC stuff
+                _ => ()
+            },
+            0x6000..=0x7FFF => (), // ? RTC stuff
+
             _ => panic!("should not have recieved values outside of this region.")
         }
     }
