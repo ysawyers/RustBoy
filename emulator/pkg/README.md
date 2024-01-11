@@ -14,5 +14,4 @@
 # TODO
 
 - Finish MBC3 Implementation
-- Fix timer (finally)
 - Start working on APU!

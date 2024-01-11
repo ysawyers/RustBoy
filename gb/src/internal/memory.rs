@@ -241,7 +241,6 @@ impl Memory {
                     self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
                 }
             },
-
             _ => panic!("should not have recieved values outside of this region.")
         }
     }
@@ -250,10 +249,23 @@ impl Memory {
         match addr {
             0x0000..=0x3FFF => self.rom_chip[(addr & 0x3FFF) as usize],
             0x4000..=0x7FFF => {
-                let offset = ((self.ram_rom_bank_number as u32) << 19) | ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+                let offset = ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
                 return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
             },
-            0xA000..=0xBFFF => 0x00, // RTC / RAM
+            0xA000..=0xBFFF => {
+                if self.ram_rom_bank_number > 0x03 {
+                    panic!("did not implemenent RTC stuff yet.")
+                }
+
+                if self.mbc_ram_enabled {
+                    let mut offset = 0;
+                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
+                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
+                    }
+                    return self.sram[(offset + (addr & 0x1FFF)) as usize];
+                }
+                return 0xFF
+            }, 
 
             _ => panic!("should not have recieved values outside of this region.")
         }
@@ -269,15 +281,15 @@ impl Memory {
                 }
             },
             0x2000..=0x3FFF => self.rom_bank_number = if val == 0x00 { 0x01 } else { val & 0x7F },
-            0x4000..=0x5FFF => match val {
-                0x00..=0x03 => self.ram_rom_bank_number = val,
-                0x08..=0x0C => (), // ? RTC stuff
-                _ => ()
-            },
-            0x6000..=0x7FFF => (), // ? RTC stuff
+            0x4000..=0x5FFF => self.ram_rom_bank_number = val,
+            0x6000..=0x7FFF => (), // Latch Clock Data (Write Only)
             0xA000..=0xBFFF => {
                 if self.mbc_ram_enabled {
-                    // TODO
+                    let mut offset = 0;
+                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
+                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
+                    }
+                    self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
                 }
             }
 
