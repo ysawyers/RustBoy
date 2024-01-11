@@ -13,5 +13,4 @@
 
 # TODO
 
-- Finish MBC3 Implementation
 - Start working on APU!

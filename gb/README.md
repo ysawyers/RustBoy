@@ -5,6 +5,7 @@
 ![Bomb Jack boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/bombjack-boot-screen.png "Bomb Jack")
 ![Kirby Dream Land boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/kirby-boot-screen.png "Kirby Dream Land")
 ![Zelda Links Awakening boot screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/zelda-boot-screen.png "Zelda Links Awakening")
+![Pokemon red new game screen](https://github.com/ysawyers/emufun/blob/main/gb/imgs/pokemon-red-intro-screen.png "Pokemon red")
 
 # Tests
 
@@ -13,5 +14,4 @@
 
 # TODO
 
-- Finish MBC3 Implementation
 - Start working on APU!
