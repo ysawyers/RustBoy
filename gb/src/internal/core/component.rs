@@ -1,7 +1,8 @@
 use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
-use crate::u64_to_little_endian;
+use crate::{u64_to_little_endian, console_log, log};
+use std;
 
 pub struct CPU {
     pub registers: Registers,
@@ -845,9 +846,20 @@ impl CPU {
     fn create_block(&self, ident: &str, block: &[u8]) -> Vec<u8> {
         let mut bess_block = vec![];
         bess_block.extend_from_slice(ident.as_bytes());
-        bess_block.push(block.len() as u8);
+        bess_block.push((block.len() & 0x00FF) as u8);
+        bess_block.push(((block.len() & 0xFF00) >> 8) as u8);
         bess_block.extend_from_slice(block);
         bess_block
+    }
+
+    fn next_block(&self, bess_encoding: &Vec<u8>, ptr: &mut usize) -> (String, u16) {
+        let name = std::str::from_utf8(&bess_encoding[*ptr..*ptr+4]).expect("invalid utf-8 sequence");
+        *ptr += 4;
+
+        let block_len = ((bess_encoding[*ptr + 1] as u16) << 8) | (bess_encoding[*ptr] as u16);
+        *ptr += 2;
+
+        (String::from(name), block_len)
     }
 
     fn create_core_block(&mut self, major_bess_ver: [u8; 2], minor_bess_ver: [u8; 2], model_identifier: &str) -> Vec<u8> {
@@ -873,14 +885,12 @@ impl CPU {
         core
     }
 
-    pub fn generate_bess_encoding(&mut self) -> Vec<u8> {
+    pub fn create_save_file(&mut self) -> Vec<u8> {
         let mut bess_encoding = vec![];
 
         // populates the bess_buffer_offsets vector
-        bess_encoding.extend(self.bus.aggregate_buffers());
-        
-        // must be defined here since ( Memory::bess_buffer_offsets ) is cleared after CORE block
-        let first_bess_block = self.bus.bess_buffer_offsets.len() as u64;
+        let large_buffers = self.bus.aggregate_buffers();
+        bess_encoding.extend(&large_buffers);
 
         bess_encoding.extend(self.create_block("NAME", "emufun-gb".as_bytes()));
         bess_encoding.extend(self.create_block("INFO", &self.bus.get_rom_info()));
@@ -893,16 +903,29 @@ impl CPU {
             bess_encoding.extend(self.create_block("MBC ", &mbc_block.unwrap()))
         }
 
-        bess_encoding.extend(self.create_block("END", &[]));
+        bess_encoding.extend(self.create_block("END ", &[]));
 
-        bess_encoding.extend_from_slice(&u64_to_little_endian(first_bess_block));
+        bess_encoding.extend_from_slice(&u64_to_little_endian(large_buffers.len() as u64));
         bess_encoding.extend_from_slice("BESS".as_bytes());
 
         bess_encoding
     }
 
-    pub fn read_bess_encoding(&self) {
-        unimplemented!("TBD");
+    pub fn load_save_file(&mut self, bess_encoding: Vec<u8>) {
+        if bess_encoding[(bess_encoding.len() - 4)..] != *("BESS".as_bytes()) {
+            panic!("Invalid save file.")
+        }
+
+        // acts as starting index for the first bess block
+        let mut bess_encoding_ptr: usize = (((bess_encoding[bess_encoding.len() - 5] as u64) << 32) |  ((bess_encoding[bess_encoding.len() - 6] as u64) << 16) | ((bess_encoding[bess_encoding.len() - 7] as u64) << 8) | (bess_encoding[bess_encoding.len() - 8] as u64)) as usize;
+
+        loop {
+            let bess_block = self.next_block(&bess_encoding,  &mut bess_encoding_ptr);
+
+            match bess_block.0 {
+                _ => unimplemented!("Block not handled yet: ({})", bess_block.0)
+            }
+        }
     }
 }
 

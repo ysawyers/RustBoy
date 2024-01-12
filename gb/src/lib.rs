@@ -67,6 +67,10 @@ impl Emulator {
     }
 
     pub fn save_file(&mut self) -> Vec<u8> {
-        self.core.generate_bess_encoding()
+        self.core.create_save_file()
+    }
+
+    pub fn load_save_file(&mut self, bess_encoding: Vec<u8>) {
+        self.core.load_save_file(bess_encoding);
     }
 }

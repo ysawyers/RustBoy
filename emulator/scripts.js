@@ -88,9 +88,29 @@ init().then(() => {
     reader.readAsArrayBuffer(this.files[0]);
   });
 
+  const loadSave = document.getElementById("load-save");
+  loadSave.addEventListener("change", function (e) {
+    var reader = new FileReader();
+
+    reader.onload = function () {
+      var arrayBuffer = this.result;
+      gameboy.emulator.load_save_file(new Uint8Array(arrayBuffer));
+    };
+    reader.readAsArrayBuffer(this.files[0]);
+  });
+
   const saveButton = document.getElementById("save-button");
   saveButton.addEventListener("click", function (e) {
-    console.log(gameboy.emulator.save_file());
+    const state = gameboy.emulator.save_file();
+
+    const blob = new Blob([state]);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${new Date().getTime()}.sav`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   });
 });
 

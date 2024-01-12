@@ -201,6 +201,14 @@ export class Emulator {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
+    /**
+    * @param {Uint8Array} bess_encoding
+    */
+    load_save_file(bess_encoding) {
+        const ptr0 = passArray8ToWasm0(bess_encoding, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.emulator_load_save_file(this.__wbg_ptr, ptr0, len0);
+    }
 }
 
 async function __wbg_load(module, imports) {
@@ -237,6 +245,9 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
+    imports.wbg.__wbg_log_2642f8760832ce5f = function(arg0, arg1) {
+        console.log(getStringFromWasm0(arg0, arg1));
+    };
     imports.wbg.__wbg_new_abda76e883ba8a5f = function() {
         const ret = new Error();
         return addHeapObject(ret);
