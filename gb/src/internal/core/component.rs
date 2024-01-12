@@ -1,7 +1,7 @@
 use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
-use crate::{u64_to_little_endian, console_log, log};
+use crate::{u32_to_little_endian, console_log, log};
 use std;
 
 pub struct CPU {
@@ -857,7 +857,7 @@ impl CPU {
         *ptr += 4;
 
         let block_len = ((bess_encoding[*ptr + 1] as u16) << 8) | (bess_encoding[*ptr] as u16);
-        *ptr += 2;
+        *ptr += (block_len as usize) + 2;
 
         (String::from(name), block_len)
     }
@@ -905,24 +905,88 @@ impl CPU {
 
         bess_encoding.extend(self.create_block("END ", &[]));
 
-        bess_encoding.extend_from_slice(&u64_to_little_endian(large_buffers.len() as u64));
+        bess_encoding.extend_from_slice(&u32_to_little_endian(large_buffers.len() as u32));
         bess_encoding.extend_from_slice("BESS".as_bytes());
 
         bess_encoding
     }
 
-    pub fn load_save_file(&mut self, bess_encoding: Vec<u8>) {
-        if bess_encoding[(bess_encoding.len() - 4)..] != *("BESS".as_bytes()) {
+    pub fn load_save_file(&mut self, file: Vec<u8>) {
+        if file[(file.len() - 4)..] != *("BESS".as_bytes()) {
             panic!("Invalid save file.")
         }
 
         // acts as starting index for the first bess block
-        let mut bess_encoding_ptr: usize = (((bess_encoding[bess_encoding.len() - 5] as u64) << 32) |  ((bess_encoding[bess_encoding.len() - 6] as u64) << 16) | ((bess_encoding[bess_encoding.len() - 7] as u64) << 8) | (bess_encoding[bess_encoding.len() - 8] as u64)) as usize;
-
+        let mut file_ptr: usize = (((file[file.len() - 5] as u64) << 32) |  ((file[file.len() - 6] as u64) << 16) | ((file[file.len() - 7] as u64) << 8) | (file[file.len() - 8] as u64)) as usize;
+        
         loop {
-            let bess_block = self.next_block(&bess_encoding,  &mut bess_encoding_ptr);
+            let bess_block = self.next_block(&file,  &mut file_ptr);
 
-            match bess_block.0 {
+            match bess_block.0.as_str() {
+                "NAME" => (), // ignore for now
+                "INFO" => (), // ignore for now
+                "CORE" => {
+                    let chunk = &file[(file_ptr - (bess_block.1 as usize))..file_ptr];
+
+                    // TODO: check that the model identifier is compat. as well as major/minor versions.
+
+                    self.pc = ((chunk[0x09] as u16) << 8) | (chunk[0x08] as u16);
+                    self.registers[Register::F] = chunk[0x0A];
+                    self.registers[Register::A] = chunk[0x0B];
+                    self.registers[Register::C] = chunk[0x0C];
+                    self.registers[Register::B] = chunk[0x0D];
+                    self.registers[Register::E] = chunk[0x0E];
+                    self.registers[Register::D] = chunk[0x0F];
+                    self.registers[Register::L] = chunk[0x10];
+                    self.registers[Register::H] = chunk[0x11];
+                    self.sp = ((chunk[0x13] as u16) << 8) | (chunk[0x12] as u16);
+                    self.ime = chunk[0x14] == 1;
+                    self.bus.IE = chunk[0x15];
+                    self.is_halted = chunk[0x16] == 1;
+
+                    for i in 0..0x80 {
+                        self.bus.write(0xFF00 + i, chunk[(0x18 + i) as usize]);
+                    }
+
+                    let ram_size = ((chunk[0x9B] as u32) << 24) | ((chunk[0x9A] as u32) << 16) | ((chunk[0x99] as u32) << 8) | (chunk[0x98] as u32);
+                    let ram_offset = ((chunk[0x9F] as u32) << 24) | ((chunk[0x9E] as u32) << 16) | ((chunk[0x9D] as u32) << 8) | (chunk[0x9C] as u32);
+                    for i in 0..ram_size {
+                        self.bus.write((0xC000 + i) as u16, file[(ram_offset + i) as usize]);
+                    }
+
+                    let vram_size = ((chunk[0xA3] as u32) << 24) | ((chunk[0xA2] as u32) << 16) | ((chunk[0xA1] as u32) << 8) | (chunk[0xA0] as u32);
+                    let vram_offset = ((chunk[0xA7] as u32) << 24) | ((chunk[0xA6] as u32) << 16) | ((chunk[0xA5] as u32) << 8) | (chunk[0xA4] as u32);
+                    for i in 0..vram_size {
+                        self.bus.write((0x8000 + i) as u16, file[(vram_offset + i) as usize]);
+                    }
+
+                    let sram_size = ((chunk[0xAB] as u32) << 24) | ((chunk[0xAA] as u32) << 16) | ((chunk[0xA9] as u32) << 8) | (chunk[0xA8] as u32);
+                    let sram_offset = ((chunk[0xAF] as u32) << 24) | ((chunk[0xAE] as u32) << 16) | ((chunk[0xAD] as u32) << 8) | (chunk[0xAC] as u32);
+                    for i in 0..sram_size {
+                        self.bus.write((0xA000 + i) as u16, file[(sram_offset + i) as usize]);
+                    }
+
+                    let oam_size = ((chunk[0xB3] as u32) << 24) | ((chunk[0xB2] as u32) << 16) | ((chunk[0xB1] as u32) << 8) | (chunk[0xB0] as u32);
+                    let oam_offset = ((chunk[0xB7] as u32) << 24) | ((chunk[0xB6] as u32) << 16) | ((chunk[0xB5] as u32) << 8) | (chunk[0xB4] as u32);
+                    for i in 0..oam_size {
+                        self.bus.write((0xFE00 + i) as u16, file[(oam_offset + i) as usize]);
+                    }
+
+                    let oam_size = ((chunk[0xB3] as u32) << 24) | ((chunk[0xB2] as u32) << 16) | ((chunk[0xB1] as u32) << 8) | (chunk[0xB0] as u32);
+                    let oam_offset = ((chunk[0xB7] as u32) << 24) | ((chunk[0xB6] as u32) << 16) | ((chunk[0xB5] as u32) << 8) | (chunk[0xB4] as u32);
+                    for i in 0..oam_size {
+                        self.bus.write((0xFE00 + i) as u16, file[(oam_offset + i) as usize]);
+                    }
+
+                    let hram_size = ((chunk[0xBB] as u32) << 24) | ((chunk[0xBA] as u32) << 16) | ((chunk[0xB9] as u32) << 8) | (chunk[0xB8] as u32);
+                    let hram_offset = ((chunk[0xBF] as u32) << 24) | ((chunk[0xBE] as u32) << 16) | ((chunk[0xBD] as u32) << 8) | (chunk[0xBC] as u32);
+                    for i in 0..hram_size {
+                        self.bus.write((0xFF80 + i) as u16, file[(hram_offset + i) as usize]);
+                    }
+
+                    /* IGNORE BG/OBJ PALLETES */
+                },
+                // "END " => break,
                 _ => unimplemented!("Block not handled yet: ({})", bess_block.0)
             }
         }

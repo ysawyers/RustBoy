@@ -1,7 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 use crate::internal::apu::APU;
-use crate::u32_to_little_endian;
+use crate::{u32_to_little_endian, console_log, log};
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -323,37 +323,41 @@ impl Memory {
     pub fn aggregate_buffers(&mut self) -> Vec<u8> {
         let mut buffers = vec![];
 
-        buffers.extend(self.wram);
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.wram.len() as u32)); // size of wram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of wram
+        buffers.extend(self.wram);
 
-        buffers.extend(self.ppu.vram);
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.vram.len() as u32)); // size of vram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of vram
-
-        buffers.extend(&self.sram);
+        buffers.extend(self.ppu.vram);
+        
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.sram.len() as u32)); // size of sram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of sram
-
-        buffers.extend(self.ppu.oam);
+        buffers.extend(&self.sram);
+        
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.oam.len() as u32)); // size of oam
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of oam
-
-        buffers.extend(self.hram);
+        buffers.extend(self.ppu.oam);
+        
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.hram.len() as u32)); // size of hram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of hram
-
+        buffers.extend(self.hram);
+        
         /* JUST DMG SO BG AND OBJ PALLETES ARE STORED IN REGISTERS NOT BUFFERS */
 
         // background palletes
         self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
-
+        
         // object palletes
         self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
-
+        
         buffers
+    }
+
+    pub fn propogate_buffers(&mut self) {
+
     }
 
     pub fn update_requested_interrupts(&mut self) {

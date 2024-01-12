@@ -104,6 +104,7 @@ impl PPU {
             0xFF41 => self.stat = val,
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
+            0xFF44 => self.ly = val, // ?? 
             0xFF45 => self.lyc = val,
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,

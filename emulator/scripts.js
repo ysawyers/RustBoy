@@ -32,8 +32,6 @@ class Gameboy extends Display {
   }
 
   run(cartridge) {
-    console.log(this.emulator);
-
     fetch("binaries/DMG_ROM.bin")
       .then((res) => res.arrayBuffer())
       .then((boot) => {

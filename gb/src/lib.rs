@@ -32,12 +32,8 @@ macro_rules! console_log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
-pub fn u64_to_little_endian(val: u64) -> [u8; 4] {
-    [(val & 0xFF) as u8, ((val & 0xFF00) >> 8) as u8, ((val & 0xFF0000) >> 16) as u8, ((val & 0xFF000000) >> 32) as u8]
-}
-
-pub fn u32_to_little_endian(val: u32) -> [u8; 3] {
-    [(val & 0xFF) as u8, ((val & 0xFF00) >> 8) as u8, ((val & 0xFF0000) >> 16) as u8]
+pub fn u32_to_little_endian(val: u32) -> [u8; 4] {
+    [(val & 0xFF) as u8, ((val & 0xFF00) >> 8) as u8, ((val & 0xFF0000) >> 16) as u8, ((val & 0xFF000000) >> 24) as u8]
 }
 
 #[wasm_bindgen]
