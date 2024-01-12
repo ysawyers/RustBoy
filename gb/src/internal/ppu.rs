@@ -20,30 +20,30 @@ pub struct PPU {
     pub lyc: u8,
     pub control: u8,
     pub stat: u8,
-    pub scy: u8,
-    pub scx: u8,
-    pub wy: u8,
-    pub wx: u8,
-    pub bgp: u8,
-    pub obp0: u8,
-    pub obp1: u8,
     pub oam: [u8; 0xA0],
-    pub tick_state: TickState,
+    pub vram: [u8; 0x2000],
     pub vblank_irq_triggered: bool,
     pub stat_irq_triggered: bool,
-    vram: [u8; 0x2000],
+    scy: u8,
+    scx: u8,
+    wy: u8,
+    wx: u8,
+    bgp: u8,
+    obp0: u8,
+    obp1: u8,
     scanline_timeline: usize,
     vblank_timeline: usize,
     window_in_frame: bool,
     window_line_counter: usize,
     rendered_window_on_scanline: bool,
+    tick_state: TickState,
 
     sprite_fifo: Vec<RenderedObject>,
     background_fifo: Vec<u8>,
     sprite_buffer: Vec<Object>,
 }
 
-pub struct TickState {
+struct TickState {
     is_fetching_window: bool,
     fetcher_x: usize,
     scanline_x: usize,
@@ -81,12 +81,13 @@ impl PPU {
             0xFF43 => self.scx,
             0xFF44 => self.ly,
             0xFF45 => self.lyc,
+            0xFF46 => 0x00,
             0xFF47 => self.bgp,
             0xFF48 => self.obp0,
             0xFF49 => self.obp1,
             0xFF4A => self.wy,
             0xFF4B => self.wx,
-            _ => panic!("recieved invalid address")
+            _ => unreachable!()
         }
     }
 

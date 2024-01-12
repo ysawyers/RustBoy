@@ -21,6 +21,10 @@ export class Emulator {
 * @returns {Uint8Array}
 */
   render(keypress: number): Uint8Array;
+/**
+* @returns {Uint8Array}
+*/
+  save_file(): Uint8Array;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -32,6 +36,7 @@ export interface InitOutput {
   readonly emulator_load_bootrom: (a: number, b: number, c: number) => void;
   readonly emulator_load_catridge: (a: number, b: number, c: number) => void;
   readonly emulator_render: (a: number, b: number, c: number) => void;
+  readonly emulator_save_file: (a: number, b: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;

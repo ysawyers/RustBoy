@@ -12,6 +12,13 @@
 - Jsmoo SM38 tests: https://github.com/raddad772/jsmoo/tree/main/misc/tests/GeneratedTests
 - Blargg CPU tests w/ logs: https://github.com/wheremyfoodat/Gameboy-logs
 
+# Save Files
+
+Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/master/BESS.md
+
+![save file representation](https://github.com/ysawyers/emufun/blob/main/gb/imgs/bess-encoding.png "Save file representation")
+
 # TODO
 
-- Start working on APU!
+- Finish APU!
+- Clean up some code, support CGB next.

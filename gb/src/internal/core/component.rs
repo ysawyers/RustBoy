@@ -1,6 +1,7 @@
 use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
+use crate::u64_to_little_endian;
 
 pub struct CPU {
     pub registers: Registers,
@@ -12,7 +13,6 @@ pub struct CPU {
     tick_state: Option<TickState>,
     interrupt_tick_state: Option<InterruptTickState>,
     is_halted: bool,
-    halt_bug: bool,
 }
 
 pub struct Instruction {
@@ -159,8 +159,6 @@ impl CPU {
     fn fetch_instr(&mut self) -> (u8, Vec<MicroInstr>) {
         let opcode = self.bus.read(self.pc);
         self.pc += 1;
-
-        // if !self.halt_bug { self.pc = self.pc.wrapping_add(1) } else { self.halt_bug = false } (seemed to cause some crashing)
 
         (opcode, self.decode_instr(opcode))
     }
@@ -768,14 +766,13 @@ impl CPU {
             MicroInstr::SETHL(pos) => self.bus.write(self.registers.get_hl(), self.bus.read(self.registers.get_hl()) | 1 << pos),
             MicroInstr::EI => self.should_enable_ime = 2,
             MicroInstr::HALT => if !self.bus.flat_ram { self.is_halted = true },
-            MicroInstr::STOP => ()
+            MicroInstr::STOP => unimplemented!("encountered STOP instruction.")
         }
 
         if !self.is_halted {
             state.step += 1;
         } else if (self.bus.IE & self.bus.IF) != 0 {
             self.is_halted = false;
-            self.halt_bug = true;
             state.step += 1;
         }
 
@@ -814,7 +811,7 @@ impl CPU {
                 }
                 self.interrupt_tick_state = None;
             }
-            _ => ()
+            _ => unreachable!()
         }
     }
 
@@ -844,6 +841,69 @@ impl CPU {
         }
         return self.bus.get_display();
     }
+
+    fn create_block(&self, ident: &str, block: &[u8]) -> Vec<u8> {
+        let mut bess_block = vec![];
+        bess_block.extend_from_slice(ident.as_bytes());
+        bess_block.push(block.len() as u8);
+        bess_block.extend_from_slice(block);
+        bess_block
+    }
+
+    fn create_core_block(&mut self, major_bess_ver: [u8; 2], minor_bess_ver: [u8; 2], model_identifier: &str) -> Vec<u8> {
+        let mut core = vec![];
+
+        core.extend_from_slice(&major_bess_ver);
+        core.extend_from_slice(&minor_bess_ver);
+        core.extend_from_slice(model_identifier.as_bytes());
+
+        let cpu_state: [u8; 16] = [(self.pc & 0x00FF) as u8, (self.pc >> 8) as u8, self.registers[Register::F], self.registers[Register::A], self.registers[Register::C], 
+        self.registers[Register::B], self.registers[Register::E], self.registers[Register::D], self.registers[Register::L], 
+        self.registers[Register::H], (self.sp & 0x00FF) as u8, (self.sp >> 8) as u8, self.ime as u8, self.bus.IE, self.is_halted as u8, 0x00];
+        core.extend_from_slice(&cpu_state);
+
+        let mut mem_mapped_registers: Vec<u8> = vec![];
+        for register in 0xFF00..=0xFF7F {
+            mem_mapped_registers.push(self.bus.read(register));
+        }
+
+        core.extend(mem_mapped_registers);
+        core.append(&mut self.bus.bess_buffer_offsets); // appends then clears offsets created from copying large buffers at the beginning of the file ( Memory::aggregate_buffers() )
+
+        core
+    }
+
+    pub fn generate_bess_encoding(&mut self) -> Vec<u8> {
+        let mut bess_encoding = vec![];
+
+        // populates the bess_buffer_offsets vector
+        bess_encoding.extend(self.bus.aggregate_buffers());
+        
+        // must be defined here since ( Memory::bess_buffer_offsets ) is cleared after CORE block
+        let first_bess_block = self.bus.bess_buffer_offsets.len() as u64;
+
+        bess_encoding.extend(self.create_block("NAME", "emufun-gb".as_bytes()));
+        bess_encoding.extend(self.create_block("INFO", &self.bus.get_rom_info()));
+
+        let core_block = self.create_core_block([0x01, 0x00], [0x01, 0x00], "GD  ");
+        bess_encoding.extend(self.create_block("CORE", &core_block));
+
+        let mbc_block = self.bus.create_bess_mbc_block();
+        if !mbc_block.is_none() {
+            bess_encoding.extend(self.create_block("MBC ", &mbc_block.unwrap()))
+        }
+
+        bess_encoding.extend(self.create_block("END", &[]));
+
+        bess_encoding.extend_from_slice(&u64_to_little_endian(first_bess_block));
+        bess_encoding.extend_from_slice("BESS".as_bytes());
+
+        bess_encoding
+    }
+
+    pub fn read_bess_encoding(&self) {
+        unimplemented!("TBD");
+    }
 }
 
 impl Default for CPU {
@@ -858,7 +918,6 @@ impl Default for CPU {
             should_enable_ime: 0,
             interrupt_tick_state: None,
             is_halted: false,
-            halt_bug: false
         }
     }
 }

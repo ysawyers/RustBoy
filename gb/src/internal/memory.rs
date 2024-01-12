@@ -1,5 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
+use crate::internal::apu::APU;
+use crate::u32_to_little_endian;
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -17,6 +19,9 @@ enum MemoryBank {
 pub struct Memory {
     // testing
     pub flat_ram: bool,
+
+    // used for save files
+    pub bess_buffer_offsets: Vec<u8>, 
 
     rom_chip: Vec<u8>,
     wram: [u8; 0x2000],
@@ -39,6 +44,7 @@ pub struct Memory {
     joyp: u8,
 
     ppu: PPU,
+    apu: APU,
     timer: Timer
 }
 
@@ -97,6 +103,13 @@ impl Memory {
         };
     }
 
+    pub fn get_rom_info(&self) -> Vec<u8> {
+        let mut info = vec![];
+        info.extend_from_slice(&self.rom_chip[0x134..=0x143]); // title
+        info.extend_from_slice(&self.rom_chip[0x14E..=0x14F]); // global checksum
+        info
+    }
+
     pub fn read(&self, addr: u16) -> u8 {
         if self.boot_rom_mounted && addr <= 0xFF {
             return self.boot_rom[addr as usize]
@@ -151,6 +164,7 @@ impl Memory {
             0xFF04..=0xFF07 => self.timer.read_registers(addr),
             0xFF0F => self.IF,
             0xFF40..=0xFF4B => self.ppu.read_registers(addr),
+            0xFF50 => self.boot_rom_mounted as u8,
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize], // High RAM (HRAM)
             0xFFFF => self.IE,
 
@@ -222,7 +236,7 @@ impl Memory {
                 return 0xFF
             },
 
-            _ => panic!("should not have recieved values outside of this region.")
+            _ => unreachable!("should not have recieved values outside of this region.")
         }
     }
 
@@ -241,7 +255,7 @@ impl Memory {
                     self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
                 }
             },
-            _ => panic!("should not have recieved values outside of this region.")
+            _ => unreachable!("should not have recieved values outside of this region.")
         }
     }
 
@@ -254,7 +268,7 @@ impl Memory {
             },
             0xA000..=0xBFFF => {
                 if self.ram_rom_bank_number > 0x03 {
-                    panic!("did not implemenent RTC stuff yet.")
+                    unreachable!("did not implemenent RTC stuff yet.")
                 }
 
                 if self.mbc_ram_enabled {
@@ -267,7 +281,7 @@ impl Memory {
                 return 0xFF
             }, 
 
-            _ => panic!("should not have recieved values outside of this region.")
+            _ => unreachable!("should not have recieved values outside of this region.")
         }
     }
 
@@ -295,6 +309,51 @@ impl Memory {
 
             _ => panic!("should not have recieved values outside of this region.")
         }
+    }
+
+    pub fn create_bess_mbc_block(&self) -> Option<Vec<u8>> {
+        match self.memory_bank {
+            MemoryBank::MBCNONE => None,
+            MemoryBank::MBC1 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x40, self.ram_rom_bank_number, 0x00, 0x60, if self.banking_mode == BankingMode::ADVANCED { 1 } else { 0 }]),
+            MemoryBank::MBC3 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x40, self.ram_rom_bank_number, 0x00, 0x60, 0x00, 0x00, 0xA0, 0x00]), // latch key not implemented as well as RTC register
+            _ => unreachable!()
+        }
+    }
+
+    pub fn aggregate_buffers(&mut self) -> Vec<u8> {
+        let mut buffers = vec![];
+
+        buffers.extend(self.wram);
+        self.bess_buffer_offsets.extend(u32_to_little_endian(self.wram.len() as u32)); // size of wram
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of wram
+
+        buffers.extend(self.ppu.vram);
+        self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.vram.len() as u32)); // size of vram
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of vram
+
+        buffers.extend(&self.sram);
+        self.bess_buffer_offsets.extend(u32_to_little_endian(self.sram.len() as u32)); // size of sram
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of sram
+
+        buffers.extend(self.ppu.oam);
+        self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.oam.len() as u32)); // size of oam
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of oam
+
+        buffers.extend(self.hram);
+        self.bess_buffer_offsets.extend(u32_to_little_endian(self.hram.len() as u32)); // size of hram
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of hram
+
+        /* JUST DMG SO BG AND OBJ PALLETES ARE STORED IN REGISTERS NOT BUFFERS */
+
+        // background palletes
+        self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
+
+        // object palletes
+        self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
+        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
+
+        buffers
     }
 
     pub fn update_requested_interrupts(&mut self) {
@@ -354,6 +413,8 @@ impl Default for Memory {
             hram: [0x0; 0x7F],
             wram: [0x0; 0x2000],
             sram: vec![],
+            apu: APU::default(),
+            bess_buffer_offsets: vec![]
         }
     }
 }

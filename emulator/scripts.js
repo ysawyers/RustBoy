@@ -22,54 +22,29 @@ class Display {
   }
 }
 
+// ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"] ["#FFFFFF", "#AAAAAA", "#555555", "#000000"]
 class Gameboy extends Display {
   constructor(canvas, currentGame, canvasScale) {
     super(canvas, currentGame, canvasScale);
     super.changeCanvasDimensions(160, 144);
+    this.emulator = Emulator.new();
     this.colorPallete = ["#FFFFFF", "#AAAAAA", "#555555", "#000000"];
-    // ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"]
   }
 
   run(cartridge) {
+    console.log(this.emulator);
+
     fetch("binaries/DMG_ROM.bin")
       .then((res) => res.arrayBuffer())
       .then((boot) => {
-        const emulator = Emulator.new();
+        this.emulator.load_bootrom(new Uint8Array(boot));
+        this.emulator.load_catridge(new Uint8Array(cartridge));
 
-        emulator.load_bootrom(new Uint8Array(boot));
-        emulator.load_catridge(new Uint8Array(cartridge));
-
+        let emulator = this.emulator;
         let ctx = this.ctx;
         let colorPallete = this.colorPallete;
         let canvasScale = this.canvasScale;
         let currentGame;
-
-        var fps = 65;
-        var now;
-        var then = Date.now();
-        var interval = 1000 / fps;
-        var delta;
-
-        // function animate() {
-        //   now = Date.now();
-        //   delta = now - then;
-
-        //   if (delta > interval) {
-        //     then = now - (delta % interval);
-
-        //     let start = new Date();
-        //     let display = emulator.render(currentKeyPressed);
-        //     console.log(`frame took ${new Date() - start}ms to render.`);
-        //     for (let row = 0; row < 144; row++) {
-        //       for (let col = 0; col < 160; col++) {
-        //         ctx.fillStyle = colorPallete[display[row * 160 + col]];
-        //         ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
-        //       }
-        //     }
-        //   }
-
-        //   currentGame = requestAnimationFrame(animate);
-        // }
 
         function animate() {
           let display = emulator.render(currentKeyPressed);
@@ -102,7 +77,21 @@ init().then(() => {
       });
   });
 
-  canvas.addEventListener("click", function () {});
+  const romUpload = document.getElementById("rom-upload");
+  romUpload.addEventListener("change", function (e) {
+    var reader = new FileReader();
+
+    reader.onload = function () {
+      var arrayBuffer = this.result;
+      gameboy.run(arrayBuffer);
+    };
+    reader.readAsArrayBuffer(this.files[0]);
+  });
+
+  const saveButton = document.getElementById("save-button");
+  saveButton.addEventListener("click", function (e) {
+    console.log(gameboy.emulator.save_file());
+  });
 });
 
 window.addEventListener("keydown", (e) => {

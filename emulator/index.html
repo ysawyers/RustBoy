@@ -33,39 +33,28 @@
               <select id="rom-select-gb" size="15">
                 <option value="ZELDA.gb">ZELDA</option>
                 <option value="POKEMON.gb">POKEMON</option>
-                <option value="ROM2MB.gb">ROM2MB</option>
-                <option value="ROM4MB.gb">ROM4MB</option>
-                <option value="ROM8MB.gb">ROM8MB</option>
-                <option value="ROM16MB.gb">ROM16MB</option>
-                <option value="RAM64.gb">RAM64</option>
-                <option value="KIRBY.gb">KIRBY</option>
-
                 <option value="BOMB.gb">BOMB</option>
-                <option value="RRAM256.gb">RRAM256</option>
                 <option value="TETRIS.gb">TETRIS</option>
                 <option value="MARIO.gb">MARIO</option>
                 <option value="ASTEROID.gb">ASTEROID</option>
-
-                <option value="POKEMON.gb">POKEMON</option>
-
-                <option value="MULTICART.gb">MULTICART</option>
-
-                <option value="DIV.gb">DIV</option>
-                <option value="TIM0.gb">TIM0</option>
-                <option value="TIM0TRIGGER.gb">TIM0TRGG</option>
-                <option value="INSTRUCT.gb">INSTRUCT</option>
-                <option value="INSTRTIMING.gb">INSTRTIMING</option>
-                <option value="MEMTIMING.gb">MEMTIMING</option>
-                <option value="TIMERRR2.gb">TIMERRR2</option>
-                <option value="FAILED.gb">FAILED</option>
                 <option value="ZELDACOL.gb">ZELDACOL</option>
+                <option value="KIRBY.gb">KIRBY</option>
+                <option value="POKEMON.gb">POKEMON</option>
+                <option value="halt_ime0_ei.gb">halt_ime0_ei</option>
+                <option value="halt_ime0_nointr_timing.gb">halt_ime0_nointr_timing</option>
+                <option value="halt_ime1_timing.gb">halt_ime1_timing</option>
               </select>
             </div>
           </div>
         </div>
-        <form style="margin-bottom: 20px; margin-top: 8px">
-          <input type="file" id="myFile" name="filename" />
-        </form>
+
+        <div style="margin-top: 0.5em; margin-bottom: 1em">
+          <form style="margin-bottom: 20px; margin-top: 8px; display: inline">
+            <input type="file" id="rom-upload" />
+          </form>
+          <button id="save-button">Create Save</button>
+        </div>
+
         <div style="width: 470px; border: 3px solid black; padding: 5px">
           <p style="margin-bottom: 2px"><strong>d-pad:</strong> arrow keys</p>
           <p style="margin-bottom: 2px"><strong>start:</strong> enter</p>
