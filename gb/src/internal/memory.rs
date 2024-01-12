@@ -356,10 +356,6 @@ impl Memory {
         buffers
     }
 
-    pub fn propogate_buffers(&mut self) {
-
-    }
-
     pub fn update_requested_interrupts(&mut self) {
         let mut requests: u8 = 0x0;
 

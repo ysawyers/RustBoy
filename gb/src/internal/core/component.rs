@@ -874,6 +874,8 @@ impl CPU {
         self.registers[Register::H], (self.sp & 0x00FF) as u8, (self.sp >> 8) as u8, self.ime as u8, self.bus.IE, self.is_halted as u8, 0x00];
         core.extend_from_slice(&cpu_state);
 
+        console_log!("STORED CPU STATE: {:?}", &cpu_state);
+
         let mut mem_mapped_registers: Vec<u8> = vec![];
         for register in 0xFF00..=0xFF7F {
             mem_mapped_registers.push(self.bus.read(register));
@@ -918,7 +920,7 @@ impl CPU {
 
         // acts as starting index for the first bess block
         let mut file_ptr: usize = (((file[file.len() - 5] as u64) << 32) |  ((file[file.len() - 6] as u64) << 16) | ((file[file.len() - 7] as u64) << 8) | (file[file.len() - 8] as u64)) as usize;
-        
+
         loop {
             let bess_block = self.next_block(&file,  &mut file_ptr);
 
@@ -972,12 +974,6 @@ impl CPU {
                         self.bus.write((0xFE00 + i) as u16, file[(oam_offset + i) as usize]);
                     }
 
-                    let oam_size = ((chunk[0xB3] as u32) << 24) | ((chunk[0xB2] as u32) << 16) | ((chunk[0xB1] as u32) << 8) | (chunk[0xB0] as u32);
-                    let oam_offset = ((chunk[0xB7] as u32) << 24) | ((chunk[0xB6] as u32) << 16) | ((chunk[0xB5] as u32) << 8) | (chunk[0xB4] as u32);
-                    for i in 0..oam_size {
-                        self.bus.write((0xFE00 + i) as u16, file[(oam_offset + i) as usize]);
-                    }
-
                     let hram_size = ((chunk[0xBB] as u32) << 24) | ((chunk[0xBA] as u32) << 16) | ((chunk[0xB9] as u32) << 8) | (chunk[0xB8] as u32);
                     let hram_offset = ((chunk[0xBF] as u32) << 24) | ((chunk[0xBE] as u32) << 16) | ((chunk[0xBD] as u32) << 8) | (chunk[0xBC] as u32);
                     for i in 0..hram_size {
@@ -986,7 +982,21 @@ impl CPU {
 
                     /* IGNORE BG/OBJ PALLETES */
                 },
-                // "END " => break,
+                "MBC " => {
+                    let chunk = &file[(file_ptr - (bess_block.1 as usize))..file_ptr];
+
+                    if chunk.len() % 3 != 0 {
+                        panic!("MBC bess block must be divisible by 3.")
+                    }
+
+                    for i in 0..(chunk.len() / 3) {
+                        let offset = i * 3;
+                        let addr = ((chunk[offset + 0x01] as u16) << 8) | (chunk[offset + 0x00] as u16);
+                        let val = chunk[offset + 0x02];
+                        self.bus.write(addr, val); // writes to the MBC registers
+                    }
+                },
+                "END " => break,
                 _ => unimplemented!("Block not handled yet: ({})", bess_block.0)
             }
         }
