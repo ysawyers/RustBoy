@@ -846,18 +846,17 @@ impl CPU {
     fn create_block(&self, ident: &str, block: &[u8]) -> Vec<u8> {
         let mut bess_block = vec![];
         bess_block.extend_from_slice(ident.as_bytes());
-        bess_block.push((block.len() & 0x00FF) as u8);
-        bess_block.push(((block.len() & 0xFF00) >> 8) as u8);
+        bess_block.extend_from_slice(&u32_to_little_endian(block.len() as u32));
         bess_block.extend_from_slice(block);
         bess_block
     }
 
-    fn next_block(&self, bess_encoding: &Vec<u8>, ptr: &mut usize) -> (String, u16) {
+    fn next_block(&self, bess_encoding: &Vec<u8>, ptr: &mut usize) -> (String, u32) {
         let name = std::str::from_utf8(&bess_encoding[*ptr..*ptr+4]).expect("invalid utf-8 sequence");
         *ptr += 4;
 
-        let block_len = ((bess_encoding[*ptr + 1] as u16) << 8) | (bess_encoding[*ptr] as u16);
-        *ptr += (block_len as usize) + 2;
+        let block_len = ((bess_encoding[*ptr + 3] as u32) << 24) | ((bess_encoding[*ptr + 2] as u32) << 16) | ((bess_encoding[*ptr + 1] as u32) << 8) | (bess_encoding[*ptr] as u32);
+        *ptr += (block_len as usize) + 4;
 
         (String::from(name), block_len)
     }
@@ -873,8 +872,6 @@ impl CPU {
         self.registers[Register::B], self.registers[Register::E], self.registers[Register::D], self.registers[Register::L], 
         self.registers[Register::H], (self.sp & 0x00FF) as u8, (self.sp >> 8) as u8, self.ime as u8, self.bus.IE, self.is_halted as u8, 0x00];
         core.extend_from_slice(&cpu_state);
-
-        console_log!("STORED CPU STATE: {:?}", &cpu_state);
 
         let mut mem_mapped_registers: Vec<u8> = vec![];
         for register in 0xFF00..=0xFF7F {
@@ -930,9 +927,7 @@ impl CPU {
                 "CORE" => {
                     let chunk = &file[(file_ptr - (bess_block.1 as usize))..file_ptr];
 
-                    // TODO: check that the model identifier is compat. as well as major/minor versions.
-
-                    self.pc = ((chunk[0x09] as u16) << 8) | (chunk[0x08] as u16);
+                    self.pc = ((chunk[0x09] as u16) << 8) | (chunk[0x08] as u16); 
                     self.registers[Register::F] = chunk[0x0A];
                     self.registers[Register::A] = chunk[0x0B];
                     self.registers[Register::C] = chunk[0x0C];
@@ -943,17 +938,24 @@ impl CPU {
                     self.registers[Register::H] = chunk[0x11];
                     self.sp = ((chunk[0x13] as u16) << 8) | (chunk[0x12] as u16);
                     self.ime = chunk[0x14] == 1;
-                    self.bus.IE = chunk[0x15];
+                    self.bus.IE = chunk[0x15]; 
                     self.is_halted = chunk[0x16] == 1;
 
                     for i in 0..0x80 {
-                        self.bus.write(0xFF00 + i, chunk[(0x18 + i) as usize]);
+                        let addr = 0xFF00 + i;
+                        let val = chunk[(0x18 + i) as usize];
+
+                        match addr {
+                            0xFF04 => self.bus.timer.sysclock = (val as u16) << 8,
+                            0xFF46 => (),
+                            _ => self.bus.write(addr, val) // ignore don't care values ??
+                        }
                     }
 
-                    let ram_size = ((chunk[0x9B] as u32) << 24) | ((chunk[0x9A] as u32) << 16) | ((chunk[0x99] as u32) << 8) | (chunk[0x98] as u32);
-                    let ram_offset = ((chunk[0x9F] as u32) << 24) | ((chunk[0x9E] as u32) << 16) | ((chunk[0x9D] as u32) << 8) | (chunk[0x9C] as u32);
-                    for i in 0..ram_size {
-                        self.bus.write((0xC000 + i) as u16, file[(ram_offset + i) as usize]);
+                    let wram_size = ((chunk[0x9B] as u32) << 24) | ((chunk[0x9A] as u32) << 16) | ((chunk[0x99] as u32) << 8) | (chunk[0x98] as u32);
+                    let wram_offset = ((chunk[0x9F] as u32) << 24) | ((chunk[0x9E] as u32) << 16) | ((chunk[0x9D] as u32) << 8) | (chunk[0x9C] as u32);
+                    for i in 0..wram_size {
+                        self.bus.write((0xC000 + i) as u16, file[(wram_offset + i) as usize]);
                     }
 
                     let vram_size = ((chunk[0xA3] as u32) << 24) | ((chunk[0xA2] as u32) << 16) | ((chunk[0xA1] as u32) << 8) | (chunk[0xA0] as u32);
@@ -965,7 +967,7 @@ impl CPU {
                     let sram_size = ((chunk[0xAB] as u32) << 24) | ((chunk[0xAA] as u32) << 16) | ((chunk[0xA9] as u32) << 8) | (chunk[0xA8] as u32);
                     let sram_offset = ((chunk[0xAF] as u32) << 24) | ((chunk[0xAE] as u32) << 16) | ((chunk[0xAD] as u32) << 8) | (chunk[0xAC] as u32);
                     for i in 0..sram_size {
-                        self.bus.write((0xA000 + i) as u16, file[(sram_offset + i) as usize]);
+                        self.bus.sram[i as usize] = file[(sram_offset + i) as usize];
                     }
 
                     let oam_size = ((chunk[0xB3] as u32) << 24) | ((chunk[0xB2] as u32) << 16) | ((chunk[0xB1] as u32) << 8) | (chunk[0xB0] as u32);
@@ -979,8 +981,6 @@ impl CPU {
                     for i in 0..hram_size {
                         self.bus.write((0xFF80 + i) as u16, file[(hram_offset + i) as usize]);
                     }
-
-                    /* IGNORE BG/OBJ PALLETES */
                 },
                 "MBC " => {
                     let chunk = &file[(file_ptr - (bess_block.1 as usize))..file_ptr];
@@ -991,11 +991,16 @@ impl CPU {
 
                     for i in 0..(chunk.len() / 3) {
                         let offset = i * 3;
-                        let addr = ((chunk[offset + 0x01] as u16) << 8) | (chunk[offset + 0x00] as u16);
-                        let val = chunk[offset + 0x02];
-                        self.bus.write(addr, val); // writes to the MBC registers
+                        let addr = ((chunk[offset + 1] as u16) << 8) | (chunk[offset + 0x00] as u16);
+
+                        if addr <= 0x7FFF || (addr >= 0xA000 || addr <= 0xBFFF) {
+                            self.bus.write(addr, chunk[offset + 2]);
+                        } else {
+                            panic!("recieved invalid address for MBC register.");
+                        }
                     }
                 },
+                "XOAM" => (), 
                 "END " => break,
                 _ => unimplemented!("Block not handled yet: ({})", bess_block.0)
             }

@@ -1,7 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 use crate::internal::apu::APU;
-use crate::{u32_to_little_endian};
+use crate::{u32_to_little_endian, console_log, log};
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -23,12 +23,12 @@ pub struct Memory {
     // used for save files
     pub bess_buffer_offsets: Vec<u8>, 
 
-    rom_chip: Vec<u8>,
+    pub rom_chip: Vec<u8>,
     wram: [u8; 0x2000],
     hram: [u8; 0x7F],
-    sram: Vec<u8>, // resize to fit all banks of cartridge (if any)
+    pub sram: Vec<u8>, // resize to fit all banks of cartridge (if any)
 
-    boot_rom: [u8; 0x100],
+    pub boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
     pub boot_rom_mounted: bool,
 
@@ -45,7 +45,7 @@ pub struct Memory {
 
     ppu: PPU,
     apu: APU,
-    timer: Timer
+    pub timer: Timer
 }
 
 impl Memory {
@@ -160,7 +160,6 @@ impl Memory {
                 }
                 return 0xF;
             }
-            0xFF01 => 0xFF, // some serial register not implemented.
             0xFF04..=0xFF07 => self.timer.read_registers(addr),
             0xFF0F => self.IF,
             0xFF40..=0xFF4B => self.ppu.read_registers(addr),
@@ -274,11 +273,7 @@ impl Memory {
                 }
 
                 if self.mbc_ram_enabled {
-                    let mut offset = 0;
-                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
-                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
-                    }
-                    return self.sram[(offset + (addr & 0x1FFF)) as usize];
+                    return self.sram[(addr & 0x1FFF) as usize];
                 }
                 return 0xFF
             }, 
@@ -301,11 +296,7 @@ impl Memory {
             0x6000..=0x7FFF => (), // Latch Clock Data (Write Only)
             0xA000..=0xBFFF => {
                 if self.mbc_ram_enabled {
-                    let mut offset = 0;
-                    if self.banking_mode == BankingMode::ADVANCED && self.rom_chip[RAM_SIZE] == 0x03 { // 32 KiB RAM carts only
-                        offset = (self.ram_rom_bank_number as u16) * 0x2000;
-                    }
-                    self.sram[(offset + (addr & 0x1FFF)) as usize] = val;
+                    self.sram[(addr & 0x1FFF) as usize] = val;
                 }
             }
 
@@ -317,7 +308,7 @@ impl Memory {
         match self.memory_bank {
             MemoryBank::MBCNONE => None,
             MemoryBank::MBC1 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x40, self.ram_rom_bank_number, 0x00, 0x60, if self.banking_mode == BankingMode::ADVANCED { 1 } else { 0 }]),
-            MemoryBank::MBC3 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x40, self.ram_rom_bank_number, 0x00, 0x60, 0x00, 0x00, 0xA0, 0x00]), // latch key not implemented as well as RTC register
+            MemoryBank::MBC3 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, if self.rom_bank_number == 0x01 { 0x00 } else { self.rom_bank_number }, 0x00, 0x40, self.ram_rom_bank_number]), // latch key not implemented as well as RTC register
             _ => unreachable!()
         }
     }
@@ -336,6 +327,7 @@ impl Memory {
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.sram.len() as u32)); // size of sram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of sram
         buffers.extend(&self.sram);
+        console_log!("SRAM WRITTEN: {:?}", self.sram);
         
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.oam.len() as u32)); // size of oam
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of oam
@@ -344,16 +336,6 @@ impl Memory {
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.hram.len() as u32)); // size of hram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of hram
         buffers.extend(self.hram);
-        
-        /* JUST DMG SO BG AND OBJ PALLETES ARE STORED IN REGISTERS NOT BUFFERS */
-
-        // background palletes
-        self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
-        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
-        
-        // object palletes
-        self.bess_buffer_offsets.extend(u32_to_little_endian(0x00));
-        self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // ?
         
         buffers
     }
