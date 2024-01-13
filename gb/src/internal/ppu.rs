@@ -104,7 +104,7 @@ impl PPU {
             0xFF41 => self.stat = val,
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
-            0xFF44 => self.ly = val, // ?? 
+            0xFF44 => (), // writes to LY are ignored.
             0xFF45 => self.lyc = val,
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
@@ -390,7 +390,7 @@ impl PPU {
                             self.tick_state.scanline_x += 1;
                         }
 
-                        if !self.tick_state.is_fetching_window && self.window_in_frame && ((self.control >> WINDOW_ENABLED) & 0x1 == 1) && (self.tick_state.scanline_x >= (self.wx - 7) as usize) {
+                        if !self.tick_state.is_fetching_window && self.window_in_frame && ((self.control >> WINDOW_ENABLED) & 0x1 == 1) && self.wx <= self.tick_state.scanline_x as u8 + 7 {
                             self.tick_state.bg_fetcher_step = 0;
                             self.tick_state.fetcher_x = 0;
                             self.background_fifo.clear();

@@ -1000,6 +1000,11 @@ impl CPU {
                 _ => unimplemented!("Block not handled yet: ({})", bess_block.0)
             }
         }
+
+        // reset CPU state and any requested interrupts
+        self.tick_state = None;
+        self.interrupt_tick_state = None;
+        self.bus.IF = 0x00;
     }
 }
 

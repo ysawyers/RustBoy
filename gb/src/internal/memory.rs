@@ -1,7 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 use crate::internal::apu::APU;
-use crate::{u32_to_little_endian, console_log, log};
+use crate::{u32_to_little_endian};
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -30,7 +30,7 @@ pub struct Memory {
 
     boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
-    boot_rom_mounted: bool,
+    pub boot_rom_mounted: bool,
 
     memory_bank: MemoryBank,
     banking_mode: BankingMode,
@@ -164,7 +164,7 @@ impl Memory {
             0xFF04..=0xFF07 => self.timer.read_registers(addr),
             0xFF0F => self.IF,
             0xFF40..=0xFF4B => self.ppu.read_registers(addr),
-            0xFF50 => self.boot_rom_mounted as u8,
+            0xFF50 => if self.boot_rom_mounted { 0x00 } else { 0x01 },
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize], // High RAM (HRAM)
             0xFFFF => self.IE,
 
@@ -198,7 +198,9 @@ impl Memory {
             0xFF40..=0xFF4B => self.ppu.write_registers(addr, val),
             0xFF50 => {
                 if val & 0x1 == 1 { // bit 0 must be explicitly set to unmap the bootrom
-                    self.boot_rom_mounted = false
+                    self.boot_rom_mounted = false;
+                } else {
+                    self.boot_rom_mounted = true; // prevents mounting bootrom before all data has been loaded in from previous save.
                 }
             },
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = val, // High RAM (HRAM)
@@ -414,7 +416,7 @@ impl Default for Memory {
             wram: [0x0; 0x2000],
             sram: vec![],
             apu: APU::default(),
-            bess_buffer_offsets: vec![]
+            bess_buffer_offsets: vec![],
         }
     }
-}
+}   
