@@ -3,10 +3,10 @@ pub struct Timer {
 
     pub sysclock: u16,
     sysclock_cycles: usize,
-    pub tma: u8,
+    tma: u8,
     tma_previous: Option<u8>, // used for writes and TIMA overflows in the same cycle
-    pub tima: u8,
-    pub tac: u8,
+    tima: u8,
+    tac: u8,
     current_freq: u16 // sysclock frequency specified by TAC
 }
 

@@ -64,16 +64,16 @@ class Gameboy extends Display {
 init().then(() => {
   const canvas = document.getElementById("emulator");
 
-  const gameboy = new Gameboy(canvas, null, 3);
+  const gameboy = new Gameboy(canvas, null, 4);
 
-  const romSelect = document.getElementById("rom-select-gb");
-  romSelect.addEventListener("click", function (e) {
-    fetch(`roms/gb/${e.target.value}`)
-      .then((res) => res.arrayBuffer())
-      .then((buffer) => {
-        gameboy.run(buffer);
-      });
-  });
+  // const romSelect = document.getElementById("rom-select-gb");
+  // romSelect.addEventListener("click", function (e) {
+  //   fetch(`roms/gb/${e.target.value}`)
+  //     .then((res) => res.arrayBuffer())
+  //     .then((buffer) => {
+  //       gameboy.run(buffer);
+  //     });
+  // });
 
   const romUpload = document.getElementById("rom-upload");
   romUpload.addEventListener("change", function (e) {

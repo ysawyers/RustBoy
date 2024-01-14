@@ -8,67 +8,71 @@
       * {
         padding: 0;
         margin: 0;
+        min-width: 0;
       }
       canvas {
-        border: 3px solid gray;
-        border-radius: 2px;
-        background-color: lightgray;
+        border: 2px solid black;
+        border-radius: 5px;
+        background-color: rgb(239, 239, 239);
       }
     </style>
   </head>
   <body>
     <div style="width: 100vw; height: 100vh; display: flex; justify-content: center">
       <div style="margin-top: 1em">
-        <div style="display: flex; flex-direction: row">
-          <canvas id="emulator" width="800" height="600"></canvas>
-          <div style="margin-left: 20px">
-            <div style="width: fit-content">
-              <p style="margin-bottom: 5px">Choose Emulator:</p>
-              <select id="emulator-select" size="5">
-                <option value="gb">Game Boy</option>
-              </select>
-            </div>
-            <div>
-              <p style="margin-bottom: 5px">Choose ROM:</p>
-              <select id="rom-select-gb" size="15">
-                <option value="ZELDA.gb">ZELDA</option>
-                <option value="POKEMON.gb">POKEMON</option>
-                <option value="BOMB.gb">BOMB</option>
-                <option value="TETRIS.gb">TETRIS</option>
-                <option value="MARIO.gb">MARIO</option>
-                <option value="ASTEROID.gb">ASTEROID</option>
-                <option value="ZELDACOL.gb">ZELDACOL</option>
-                <option value="KIRBY.gb">KIRBY</option>
-                <option value="POKEMON.gb">POKEMON</option>
-                <option value="halt_ime0_ei.gb">halt_ime0_ei</option>
-                <option value="halt_ime0_nointr_timing.gb">halt_ime0_nointr_timing</option>
-                <option value="halt_ime1_timing.gb">halt_ime1_timing</option>
-              </select>
-            </div>
-          </div>
+        <div style="display: flex; flex-direction: row; margin-bottom: 10px">
+          <label style="margin-right: 5px">Select ROM: </label>
+          <input type="file" id="rom-upload" />
+          <label style="margin-right: 5px">Upload Save: </label>
+          <input type="file" id="load-save" />
         </div>
-
-        <div style="margin-top: 0.5em; margin-bottom: 1em">
-          <form style="margin-bottom: 20px; margin-top: 8px; display: inline">
-            <input type="file" id="rom-upload" />
-          </form>
-          <button id="save-button">Create Save</button>
-          <form style="margin-bottom: 20px; margin-top: 8px; display: inline">
-            <input type="file" id="load-save" />
-          </form>
+        <canvas id="emulator" width="800" height="600"></canvas>
+        <div style="width: 470px; padding: 5px">
+          <p style="display: inline"><strong>D-PAD:</strong> arrow keys</p>
+          <p style="display: inline"><strong>START:</strong> enter</p>
+          <p style="display: inline"><strong>SELECT:</strong> escape</p>
+          <p style="display: inline"><strong>A:</strong> Q</p>
+          <p style="display: inline"><strong>B:</strong> W</p>
         </div>
-
-        <div style="width: 470px; border: 3px solid black; padding: 5px">
-          <p style="margin-bottom: 2px"><strong>d-pad:</strong> arrow keys</p>
-          <p style="margin-bottom: 2px"><strong>start:</strong> enter</p>
-          <p style="margin-bottom: 2px"><strong>select:</strong> escape</p>
-          <div style="display: flex; margin-top: 10px">
-            <p style="margin-bottom: 2px"><strong>A:</strong> Q</p>
-            <p style="margin-left: 10px"><strong>B:</strong> W</p>
-          </div>
-        </div>
+        <button id="save-button">Create Save</button>
       </div>
     </div>
   </body>
   <script src="scripts.js" type="module"></script>
 </html>
+
+<!-- <div style="margin-left: 20px">
+  <div style="width: fit-content">
+    <p style="margin-bottom: 5px">Choose Emulator:</p>
+    <select id="emulator-select" size="5">
+      <option value="gb">Game Boy</option>
+    </select>
+  </div>
+  <div>
+    <p style="margin-bottom: 5px">Choose ROM:</p>
+    <select id="rom-select-gb" size="15">
+      <option value="ZELDA.gb">ZELDA</option>
+      <option value="POKEMON.gb">POKEMON</option>
+      <option value="BOMB.gb">BOMB</option>
+      <option value="TETRIS.gb">TETRIS</option>
+      <option value="MARIO.gb">MARIO</option>
+      <option value="ASTEROID.gb">ASTEROID</option>
+      <option value="ZELDACOL.gb">ZELDACOL</option>
+      <option value="KIRBY.gb">KIRBY</option>
+      <option value="POKEMON.gb">POKEMON</option>
+      <option value="halt_ime0_ei.gb">halt_ime0_ei</option>
+      <option value="halt_ime0_nointr_timing.gb">halt_ime0_nointr_timing</option>
+      <option value="halt_ime1_timing.gb">halt_ime1_timing</option>
+    </select>
+  </div>
+</div> -->
+
+<!-- <div style="margin-top: 0.5em; margin-bottom: 1em">
+  <form style="margin-bottom: 20px; margin-top: 8px; display: inline">
+    
+  </form>
+  
+  <form style="margin-bottom: 20px; margin-top: 8px; display: inline">
+    
+  </form>
+</div> -->

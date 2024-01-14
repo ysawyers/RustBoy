@@ -1,7 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 use crate::internal::apu::APU;
-use crate::{u32_to_little_endian, console_log, log};
+use crate::u32_to_little_endian;
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -23,14 +23,14 @@ pub struct Memory {
     // used for save files
     pub bess_buffer_offsets: Vec<u8>, 
 
-    pub rom_chip: Vec<u8>,
+    rom_chip: Vec<u8>,
     wram: [u8; 0x2000],
     hram: [u8; 0x7F],
     pub sram: Vec<u8>, // resize to fit all banks of cartridge (if any)
 
-    pub boot_rom: [u8; 0x100],
+    boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
-    pub boot_rom_mounted: bool,
+    boot_rom_mounted: bool,
 
     memory_bank: MemoryBank,
     banking_mode: BankingMode,
@@ -285,13 +285,13 @@ impl Memory {
     fn mbc3_write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1FFF => {
-                if val == 0x0A {
+                if val & 0xF == 0x0A {
                     self.mbc_ram_enabled = true;
-                } else if val == 0x00 {
+                } else if val & 0xF == 0x00 {
                     self.mbc_ram_enabled = false;
                 }
             },
-            0x2000..=0x3FFF => self.rom_bank_number = if val == 0x00 { 0x01 } else { val & 0x7F },
+            0x2000..=0x3FFF => self.rom_bank_number = if val & 0x7F == 0x00 { 0x01 } else { val & 0x7F },
             0x4000..=0x5FFF => self.ram_rom_bank_number = val,
             0x6000..=0x7FFF => (), // Latch Clock Data (Write Only)
             0xA000..=0xBFFF => {
@@ -327,7 +327,6 @@ impl Memory {
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.sram.len() as u32)); // size of sram
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of sram
         buffers.extend(&self.sram);
-        console_log!("SRAM WRITTEN: {:?}", self.sram);
         
         self.bess_buffer_offsets.extend(u32_to_little_endian(self.ppu.oam.len() as u32)); // size of oam
         self.bess_buffer_offsets.extend(u32_to_little_endian(buffers.len() as u32)); // offset of oam

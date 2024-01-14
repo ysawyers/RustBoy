@@ -187,7 +187,7 @@ impl PPU {
             // shoutout to nemo for helping me with this math lol
             let mut vertical_offset = ((self.ly as u16).wrapping_sub((sprite.y_pos as u16).wrapping_sub(16)) % sprite_height).wrapping_mul(2) as u16;
             if vertical_flip {
-                vertical_offset = ((sprite_height - 1) *2 ) - vertical_offset;
+                vertical_offset = ((sprite_height - 1) * 2) - vertical_offset;
             }
 
             if self.tick_state.sprite_fetcher_step < 1 {
