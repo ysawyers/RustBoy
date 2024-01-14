@@ -137,7 +137,7 @@ impl PPU {
     }
 
     fn detect_sprite(&mut self) -> Option<Object> {
-        // insertion sort
+        // sort sprites in the order they appear in on the scanline (x pos)
         for i in 1..self.sprite_buffer.len() {
             while self.sprite_buffer[i - 1].x_pos > self.sprite_buffer[i].x_pos {
                 let temp = self.sprite_buffer[i - 1];
@@ -146,6 +146,7 @@ impl PPU {
             }
         }
 
+        // grab the first valid element and pop it from the buffer (can i just always check from the front now that im sorting?)
         for i in 0..self.sprite_buffer.len() {
             if self.sprite_buffer[i].x_pos <= self.tick_state.scanline_x as u8 + 8 {
                 return Some(self.sprite_buffer.remove(i));
@@ -204,31 +205,27 @@ impl PPU {
                 self.tick_state.sprite_fetcher_step += 1;
             } else {
                 let horizontal_flip = sprite.sprite_flags >> 5 & 0x1 == 1;
-                let base = (if sprite.x_pos < 8 { 8 - sprite.x_pos } else { 0 }) + (self.sprite_fifo.len() as u8);
+                let mut base = if sprite.x_pos < 8 { 8 - sprite.x_pos } else { 0 };
 
-                // actually what the fuck is this... it works though so we gonna just rock n' roll
-                if self.sprite_fifo.len() >= 3 {
-                    for i in base..8 {
-                        let pixel = if horizontal_flip { i } else { 7 - i };
-                        if ((i - base) as usize) < self.sprite_fifo.len() && self.get_object_color((self.sprite_fifo[(i - base) as usize].flags >> 4) & 0x1, self.sprite_fifo[(i - base) as usize].color_id) == 0 {
-                            self.sprite_fifo.push(RenderedObject {
-                                color_id: (((self.tick_state.tile_data_high >> pixel) & 0x1) << 1) | ((self.tick_state.tile_data_low >> pixel) & 0x1), 
-                                flags: sprite.sprite_flags,
-                                x_pos: sprite.x_pos
-                            });
-                        }
-                    }
-                } else {
-                    for i in base..8 {
-                        let pixel = if horizontal_flip { i } else { 7 - i };
-                        self.sprite_fifo.push(RenderedObject {
-                            color_id: (((self.tick_state.tile_data_high >> pixel) & 0x1) << 1) | ((self.tick_state.tile_data_low >> pixel) & 0x1), 
-                            flags: sprite.sprite_flags,
-                            x_pos: sprite.x_pos
-                        });
+                // remove excess transparent pixels that could be overlapping.
+                while self.sprite_fifo.len() > 0 {                    
+                    if self.sprite_fifo[self.sprite_fifo.len() - 1].color_id == 0 {
+                        self.sprite_fifo.pop();
+                    } else {
+                        break;
                     }
                 }
-                
+                base += self.sprite_fifo.len() as u8;
+
+                for i in base..8 {
+                    let pixel = if horizontal_flip { i } else { 7 - i };
+                    self.sprite_fifo.push(RenderedObject {
+                        color_id: (((self.tick_state.tile_data_high >> pixel) & 0x1) << 1) | ((self.tick_state.tile_data_low >> pixel) & 0x1), 
+                        flags: sprite.sprite_flags,
+                        x_pos: sprite.x_pos
+                    });
+                }
+
                 self.tick_state.current_sprite = self.detect_sprite();
                 self.tick_state.sprite_fetcher_step = 0;
             }
