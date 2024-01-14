@@ -268,15 +268,16 @@ impl Memory {
                 return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
             },
             0xA000..=0xBFFF => {
-                if self.ram_rom_bank_number > 0x03 {
-                    unreachable!("did not implemenent RTC stuff yet.")
-                }
-
                 if self.mbc_ram_enabled {
-                    return self.sram[(addr & 0x1FFF) as usize];
+                    if self.ram_rom_bank_number > 0x03 {
+                        unreachable!("did not implemenent RTC stuff yet.")
+                    }
+
+                    let offset = ((self.ram_rom_bank_number as u32) << 13) | ((addr as u32) & 0x1FFF);
+                    return self.sram[(offset as usize) & (self.sram.len() - 1)];
                 }
                 return 0xFF
-            }, 
+            },
 
             _ => unreachable!("should not have recieved values outside of this region.")
         }
@@ -287,7 +288,7 @@ impl Memory {
             0x0000..=0x1FFF => {
                 if val & 0xF == 0x0A {
                     self.mbc_ram_enabled = true;
-                } else if val & 0xF == 0x00 {
+                } else {
                     self.mbc_ram_enabled = false;
                 }
             },
@@ -296,7 +297,9 @@ impl Memory {
             0x6000..=0x7FFF => (), // Latch Clock Data (Write Only)
             0xA000..=0xBFFF => {
                 if self.mbc_ram_enabled {
-                    self.sram[(addr & 0x1FFF) as usize] = val;
+                    let offset = ((self.ram_rom_bank_number as u32) << 13) | ((addr as u32) & 0x1FFF);
+                    let sram_len = self.sram.len() - 1;
+                    self.sram[(offset as usize) & sram_len] = val;
                 }
             }
 
