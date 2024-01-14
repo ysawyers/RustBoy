@@ -38,7 +38,7 @@ pub struct PPU {
     rendered_window_on_scanline: bool,
     tick_state: TickState,
 
-    sprite_fifo: Vec<RenderedObject>,
+    sprite_fifo: Vec<ObjectPixel>,
     background_fifo: Vec<u8>,
     sprite_buffer: Vec<Object>,
 }
@@ -66,7 +66,7 @@ struct Object {
     sprite_flags: u8
 }
 
-struct RenderedObject {
+struct ObjectPixel {
     color_id: u8,
     flags: u8,
     x_pos: u8
@@ -205,25 +205,25 @@ impl PPU {
                 self.tick_state.sprite_fetcher_step += 1;
             } else {
                 let horizontal_flip = sprite.sprite_flags >> 5 & 0x1 == 1;
-                let mut base = if sprite.x_pos < 8 { 8 - sprite.x_pos } else { 0 };
+                let base = if sprite.x_pos < 8 { 8 - sprite.x_pos } else { 0 };
 
-                // remove excess transparent pixels that could be overlapping.
-                while self.sprite_fifo.len() > 0 {                    
-                    if self.sprite_fifo[self.sprite_fifo.len() - 1].color_id == 0 {
-                        self.sprite_fifo.pop();
-                    } else {
-                        break;
-                    }
-                }
-                base += self.sprite_fifo.len() as u8;
-
-                for i in base..8 {
-                    let pixel = if horizontal_flip { i } else { 7 - i };
-                    self.sprite_fifo.push(RenderedObject {
-                        color_id: (((self.tick_state.tile_data_high >> pixel) & 0x1) << 1) | ((self.tick_state.tile_data_low >> pixel) & 0x1), 
+                for i in (base as usize)..8 {
+                    let pos = if horizontal_flip { i } else { 7 - i };
+                    let pixel = ObjectPixel {
+                        color_id: (((self.tick_state.tile_data_high >> pos) & 0x1) << 1) | ((self.tick_state.tile_data_low >> pos) & 0x1), 
                         flags: sprite.sprite_flags,
                         x_pos: sprite.x_pos
-                    });
+                    };
+
+                    // mix overlapping pixels
+                    if i + 1 <= self.sprite_fifo.len() {
+                        if self.sprite_fifo[i].color_id == 0 && pixel.color_id != 0 {
+                            self.sprite_fifo.remove(i);
+                            self.sprite_fifo.insert(i, pixel);
+                        }
+                    } else {
+                        self.sprite_fifo.push(pixel);
+                    }
                 }
 
                 self.tick_state.current_sprite = self.detect_sprite();
@@ -375,7 +375,7 @@ impl PPU {
 
                                 if sprite.color_id == 0x00 { // sprite is transparent so background is visible
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
-                                } else if (sprite.flags >> 7) & 0x1 == 1 && bg_color_value != 0 { // background has priority and isn't transparent
+                                } else if (sprite.flags >> 7) & 0x1 == 1 && bg_color_id != 0 { // background has priority and isn't transparent
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = bg_color_value;
                                 } else { // otherwise just default to showing the sprite
                                     self.lcd[(self.ly as usize * 160) + self.tick_state.scanline_x] = sprite_color_value;

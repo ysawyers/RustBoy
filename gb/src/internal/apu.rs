@@ -16,7 +16,7 @@ impl APU {
 
             0xFF24 => self.nr0[4] = val,
             0xFF25 => self.nr1[4] = val,
-            0xFF26 => self.nr2[4] = val & 0x80, // NR52: lower 4 bits are read only so masked to prevent writes.
+            0xFF26 => self.nr2[4] = val & 0x80,
             
             _ => unreachable!()
         }
