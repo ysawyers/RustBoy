@@ -20,5 +20,6 @@ Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/m
 
 # TODO
 
-- Finish APU!
-- Clean up some code, support CGB next.
+- Throttle down to 60 FPS
+- Implement APU
+- CGB

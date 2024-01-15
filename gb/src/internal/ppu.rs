@@ -24,6 +24,7 @@ pub struct PPU {
     pub vram: [u8; 0x2000],
     pub vblank_irq_triggered: bool,
     pub stat_irq_triggered: bool,
+    pub rendered_frame: bool,
     scy: u8,
     scx: u8,
     wy: u8,
@@ -431,7 +432,8 @@ impl PPU {
                     self.ly = 0;
                     self.vblank_irq_triggered = false;
                     self.window_in_frame = false;
-                    self.update_mode(Mode::OAMSCAN)
+                    self.update_mode(Mode::OAMSCAN);
+                    self.rendered_frame = true;
                 } else if self.vblank_timeline % 456 == 0 {
                     self.ly += 1;
                 }
@@ -478,7 +480,8 @@ impl Default for PPU {
             sprite_fifo: vec![],
             window_in_frame: false,
             window_line_counter: 0,
-            rendered_window_on_scanline: false
+            rendered_window_on_scanline: false,
+            rendered_frame: false
         }
     }
 }

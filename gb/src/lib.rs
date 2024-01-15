@@ -5,8 +5,6 @@ use std::panic;
 
 mod internal;
 
-const CYCLES_PER_FRAME: usize = 17556;
-
 #[wasm_bindgen]
 extern "C" {
     // Use `js_namespace` here to bind `console.log(..)` instead of just
@@ -59,7 +57,7 @@ impl Emulator {
     }
 
     pub fn render(&mut self, keypress: i8) -> Vec<u8> {
-        self.core.next_frame(CYCLES_PER_FRAME, keypress).to_vec()
+        self.core.next_frame(keypress).to_vec()
     }
 
     pub fn save_file(&mut self) -> Vec<u8> {

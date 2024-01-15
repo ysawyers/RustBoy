@@ -42,7 +42,6 @@ class Gameboy extends Display {
         let ctx = this.ctx;
         let colorPallete = this.colorPallete;
         let canvasScale = this.canvasScale;
-        let currentGame;
 
         function animate() {
           let display = emulator.render(currentKeyPressed);
@@ -52,11 +51,9 @@ class Gameboy extends Display {
               ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
             }
           }
-          currentGame = requestAnimationFrame(animate);
+          requestAnimationFrame(animate);
         }
         animate();
-
-        this.changeGame(currentGame);
       });
   }
 }

@@ -816,9 +816,9 @@ impl CPU {
         }
     }
 
-    pub fn next_frame(&mut self, cycles: usize, keypress: i8) -> Display {
+    pub fn next_frame(&mut self, keypress: i8) -> Display {
         self.bus.keypress = keypress;
-        for _ in 0..cycles { // for each cycle...
+        while !self.bus.is_frame_rendered() { // represents 1 M-Cycle
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() } // either servicing interrupt or executing a normal instruction
             self.bus.update_components();
             self.bus.update_requested_interrupts();
@@ -830,7 +830,7 @@ impl CPU {
                                 0 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::VBLANK, step: 0 }),
                                 1 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::STAT, step: 0 }),
                                 2 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::TIMER, step: 0 }),
-                                _ => panic!("Unexpected branch.")
+                                _ => unreachable!()
                             };
                             self.bus.IF &= !(1 << i); // reset the bit that has been requested while processing
                             self.ime = false; // disable interrupts to prevent anymore from being serviced while processing the current one

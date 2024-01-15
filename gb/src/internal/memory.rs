@@ -376,6 +376,14 @@ impl Memory {
     pub fn get_display(&self) -> Display {
         self.ppu.lcd
     }
+
+    pub fn is_frame_rendered(&mut self) -> bool {
+        if self.ppu.rendered_frame {
+            self.ppu.rendered_frame = false;
+            return true;
+        }
+        return false;
+    }
 }
 
 impl Default for Memory {
