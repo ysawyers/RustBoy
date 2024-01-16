@@ -20,6 +20,5 @@ Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/m
 
 # TODO
 
-- Throttle down to 60 FPS
-- Implement APU
-- CGB
+- Finish APU
+- Implement MBC5 (at this point will cover most games)

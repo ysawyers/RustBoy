@@ -392,6 +392,11 @@ impl PPU {
                             self.tick_state.bg_fetcher_step = 0;
                             self.tick_state.fetcher_x = 0;
                             self.background_fifo.clear();
+
+                            // TODO: play around to see the difference this makes.
+                            // self.sprite_fifo.clear();
+                            // self.sprite_buffer.clear();
+
                             self.tick_state.is_fetching_window = true;
                             break;
                         }

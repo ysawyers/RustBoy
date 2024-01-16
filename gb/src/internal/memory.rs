@@ -162,6 +162,7 @@ impl Memory {
             }
             0xFF04..=0xFF07 => self.timer.read_registers(addr),
             0xFF0F => self.IF,
+            0xFF10..=0xFF3F => self.apu.read_registers(addr),
             0xFF40..=0xFF4B => self.ppu.read_registers(addr),
             0xFF50 => if self.boot_rom_mounted { 0x00 } else { 0x01 },
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize], // High RAM (HRAM)
@@ -193,6 +194,7 @@ impl Memory {
             0xFF00 => self.joyp = val,
             0xFF04..=0xFF07 => self.timer.write_registers(addr, val),
             0xFF0F => self.IF = val,
+            0xFF10..=0xFF3F => self.apu.write_registers(addr, val),
             0xFF46 => self.oam_dma_transfer((val as u16) << 8),
             0xFF40..=0xFF4B => self.ppu.write_registers(addr, val),
             0xFF50 => {
@@ -368,9 +370,10 @@ impl Memory {
         self.IF |= requests;
     }
 
-    pub fn update_components(&mut self) { // 1 cycle
+    pub fn update_components(&mut self) { // 1 M-cycle
         self.ppu.update();
         self.timer.update();
+        self.apu.update(((self.timer.sysclock >> 12) & 0x1) as u8); // bit 4 of DIV register
     }
 
     pub fn get_display(&self) -> Display {
