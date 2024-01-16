@@ -13,7 +13,7 @@ enum BankingMode {
 
 #[derive(PartialEq, Debug)]
 enum MemoryBank {
-    MBCNONE, MBC1, MBC1M, MBC3
+    MBCNONE, MBC1, MBC1M, MBC3, MBC5
 }
 
 pub struct Memory {
@@ -35,6 +35,7 @@ pub struct Memory {
     memory_bank: MemoryBank,
     banking_mode: BankingMode,
     rom_bank_number: u8,
+    mbc5_rom_bank_number_top_bit: u8,
     ram_rom_bank_number: u8,
 
     pub IE: u8,
@@ -99,6 +100,7 @@ impl Memory {
                 }
             },
             0x0F..=0x13 => self.memory_bank = MemoryBank::MBC3,
+            0x19..=0x1E => self.memory_bank = MemoryBank::MBC5,
             _ => panic!("MBC NOT IMPLEMENTED YET! 0x{:02X}", self.rom_chip[MBC_TYPE])
         };
     }
@@ -121,6 +123,8 @@ impl Memory {
                     return self.mbc1_read(addr);
                 } else if self.memory_bank == MemoryBank::MBC3 {
                     return self.mbc3_read(addr);
+                } else if self.memory_bank == MemoryBank::MBC5 {
+                    return self.mbc5_read(addr);
                 };
                 self.rom_chip[addr as usize]
             },
@@ -129,7 +133,9 @@ impl Memory {
                     return self.mbc1_read(addr);
                 } else if self.memory_bank == MemoryBank::MBC3 {
                     return self.mbc3_read(addr);
-                }
+                } else if self.memory_bank == MemoryBank::MBC5 {
+                    return self.mbc5_read(addr);
+                };
                 self.rom_chip[addr as usize]
             },
             0x8000..=0x9FFF => self.ppu.read_vram(addr - 0x8000),
@@ -179,6 +185,8 @@ impl Memory {
                     self.mbc1_write(addr, val)
                 } else if self.memory_bank == MemoryBank::MBC3 {
                     self.mbc3_write(addr, val)
+                } else if self.memory_bank == MemoryBank::MBC5 {
+                    self.mbc5_write(addr, val)
                 }
             },
             0xA000..=0xBFFF => {
@@ -186,6 +194,8 @@ impl Memory {
                     self.mbc1_write(addr, val)
                 } else if self.memory_bank == MemoryBank::MBC3 {
                     self.mbc3_write(addr, val)
+                } else if self.memory_bank == MemoryBank::MBC5 {
+                    self.mbc5_write(addr, val)
                 }
             },
             0x8000..=0x9FFF => self.ppu.write_vram(addr - 0x8000, val), // 8 KiB Video RAM (VRAM)
@@ -309,6 +319,42 @@ impl Memory {
         }
     }
 
+    fn mbc5_read(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x3FFF => self.rom_chip[(addr & 0x3FFF) as usize],
+            0x4000..=0x7FFF => {
+                let offset = ((self.mbc5_rom_bank_number_top_bit as u32) << 22) | ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+                return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
+            },
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    let offset = ((self.ram_rom_bank_number as u32) << 13) | ((addr as u32) & 0x1FFF);
+                    return self.sram[(offset as usize) & (self.sram.len() - 1)];
+                }
+                return 0xFF
+            },
+            _ => panic!("should not have recieved values outside of this region.")
+        }
+    }
+
+    fn mbc5_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1FFF => self.mbc_ram_enabled = true,
+            0x2000..=0x2FFF => self.rom_bank_number = val,
+            0x3000..=0x3FFF => self.mbc5_rom_bank_number_top_bit = val & 0x01,
+            0x4000..=0x5FFF => self.ram_rom_bank_number = val & 0x0F,
+            0x6000..=0x7FFF => (),
+            0xA000..=0xBFFF => {
+                if self.mbc_ram_enabled {
+                    let offset = ((self.ram_rom_bank_number as u32) << 13) | ((addr as u32) & 0x1FFF);
+                    let sram_len = self.sram.len() - 1;
+                    return self.sram[(offset as usize) & sram_len] = val;
+                }
+            }
+            _ => panic!("should not have recieved values outside of this region.")
+        }
+    }
+
     pub fn create_bess_mbc_block(&self) -> Option<Vec<u8>> {
         match self.memory_bank {
             MemoryBank::MBCNONE => None,
@@ -412,6 +458,7 @@ impl Default for Memory {
             sram: vec![],
             apu: APU::default(),
             bess_buffer_offsets: vec![],
+            mbc5_rom_bank_number_top_bit: 0,
         }
     }
 }   

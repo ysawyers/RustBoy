@@ -1,3 +1,5 @@
+use crate::{console_log, log};
+
 // NRxy: nr0-4 IS THE REGISTER ID AND THE INDEX [X] IS THE CHANNEL
 pub struct APU {
     prev_div_apu_bit: u8,
@@ -20,6 +22,9 @@ pub struct APU {
     ch1_envelope_direction: u8, // bit 3
     ch1_sweep_pace: u8, // bits 2 - 0
 
+    /* NR13 */
+    ch1_period_lower: u8, // lower 8 bits
+
     /* NR14 */
     ch1_period_upper: u8, // upper 3 bits
     ch1_length_enable: bool, // when enabled tick the length
@@ -27,12 +32,26 @@ pub struct APU {
 }
 
 impl APU {
+    pub fn read_registers(&self, addr: u16) -> u8 {
+        match addr {
+            // 0xFF10 => {}, ??
+            0xFF11 => self.ch1_wave_duty << 6, // 00 - 12.5% | 01 - 25% | 10 - 50% | 11 - 75% (output waveform)
+            0xFF12 => self.nr1[2],
+            0xFF14 => if self.ch1_length_enable { 1 << 6 } else { 0 },
+
+            0xFF24 => self.nr5[0], // bits 6-4 left volume | bits 2-0 right volume
+            0xFF25 => self.nr5[1],
+            0xFF26 => self.nr5[2], // bit 3 - CH4 on? | bit 2 - CH3 on? | bit 1 - CH2 on? | bit 0 - CH1 on?
+
+            _ => 0x00
+        }
+    }
+
     pub fn write_registers(&mut self, addr: u16, val: u8) {
         match addr {
             0xFF10 => { // NR10
-
+                // TODO
             },
-
             0xFF11 => { // NR11
                 self.ch1_initial_length_timer = val & 0x1F;
                 self.ch1_wave_duty = (val & 0xC0) >> 6;
@@ -50,6 +69,7 @@ impl APU {
 
                 self.nr1[2] = val;
             },
+            0xFF13 => self.ch1_period_lower = val,
             0xFF14 => { // NR14
                 // turn channel on ONLY when dac is set and MSB is set
                 if ((val >> 7) & 0x1 == 1) && self.ch1_dac {
@@ -68,35 +88,6 @@ impl APU {
         }
     }
 
-    pub fn read_registers(&self, addr: u16) -> u8 {
-        match addr {
-            /* CHANNEL 1 */
-            // 0xFF10 => {
-
-
-            //     return 0
-            // },
-
-            0xFF11 => self.ch1_wave_duty, // 00 - 12.5% | 01 - 25% | 10 - 50% | 11 - 75% (output waveform)
-            0xFF12 => self.nr1[2],
-
-            // 0xFF13 => {
-
-
-
-            //     return 0
-            // },
-
-            0xFF14 => if self.ch1_length_enable { 1 } else { 0 },
-
-            0xFF24 => self.nr5[0], // bits 6-4 left volume | bits 2-0 right volume
-            0xFF25 => self.nr5[1],
-            0xFF26 => self.nr5[2], // bit 3 - CH4 on? | bit 2 - CH3 on? | bit 1 - CH2 on? | bit 0 - CH1 on?
-
-            _ => 0x00
-        }
-    }
-
     pub fn update(&mut self, current_div_apu_bit: u8) {
         if self.prev_div_apu_bit == 1 && current_div_apu_bit == 0 {
             self.div_apu_counter = self.div_apu_counter.wrapping_add(1);
@@ -112,6 +103,8 @@ impl APU {
                     self.ch1_initial_length_timer += 1;
 
                     if self.ch1_initial_length_timer == 64 {
+                        console_log!("channel 1 length counter overflow!");
+
                         self.nr5[2] &= !(1 << 0); // switches channel 1 off when length timer gets overflowed.
                         self.ch1_initial_length_timer = 0;
                         self.ch1_length_timer_lock = true;
@@ -146,6 +139,7 @@ impl Default for APU {
             ch1_initial_volume: 0x0,
             ch1_envelope_direction: 0x0,
             ch1_sweep_pace: 0x0,
+            ch1_period_lower: 0x00,
             ch1_period_upper: 0x00,
             ch1_length_enable: false,
             ch1_length_timer_lock: false
