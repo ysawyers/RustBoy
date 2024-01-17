@@ -21,4 +21,3 @@ Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/m
 # TODO
 
 - Finish APU
-- Implement MBC5 (at this point will cover most games)

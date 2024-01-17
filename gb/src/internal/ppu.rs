@@ -1,3 +1,5 @@
+use crate::{console_log, log};
+
 const LCD_ENABLED: u8 = 7;
 const WINDOW_TILE_MAP: u8 = 6;
 const WINDOW_ENABLED: u8 = 5;
@@ -7,7 +9,7 @@ const SPRITE_SIZE: u8 = 2;
 const SPRITES_ENABLED: u8 = 1;
 const BG_OR_WINDOW_ENABLED: u8 = 0;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Mode {
     OAMSCAN, DRAW, HBLANK, VBLANK
 }
@@ -82,7 +84,7 @@ impl PPU {
             0xFF43 => self.scx,
             0xFF44 => self.ly,
             0xFF45 => self.lyc,
-            0xFF46 => 0x00,
+            0xFF46 => 0xFF,
             0xFF47 => self.bgp,
             0xFF48 => self.obp0,
             0xFF49 => self.obp1,

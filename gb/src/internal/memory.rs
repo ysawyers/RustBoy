@@ -1,7 +1,7 @@
 use crate::internal::ppu::{PPU, Display};
 use crate::internal::timer::Timer;
 use crate::internal::apu::APU;
-use crate::u32_to_little_endian;
+use crate::{u32_to_little_endian, console_log, log};
 
 const MBC_TYPE: usize = 0x0147;
 const RAM_SIZE: usize = 0x0149;
@@ -64,6 +64,8 @@ impl Memory {
     pub fn load_cartridge(&mut self, bytes: Vec<u8>) {
         self.rom_chip = bytes;
 
+        self.sram.resize(0x2000, 0x00); // some cartridges "use MBC" but actually dont so just initializing 16 KiB by default
+
         match self.rom_chip[RAM_SIZE] {
             0x00 => (), // No RAM
             0x01 => (), // Unused
@@ -76,10 +78,12 @@ impl Memory {
 
         match self.rom_chip[MBC_TYPE] {
             0x00 => {
+                console_log!("using mbc none.");
                 self.memory_bank = MemoryBank::MBCNONE;
                 self.rom_chip.resize(0x10000, 0x00);
             },
             0x01..=0x03 => {
+                console_log!("using mbc1");
                 self.memory_bank = MemoryBank::MBC1;
 
                 // checks if MBC1M instead
@@ -99,8 +103,14 @@ impl Memory {
                     }
                 }
             },
-            0x0F..=0x13 => self.memory_bank = MemoryBank::MBC3,
-            0x19..=0x1E => self.memory_bank = MemoryBank::MBC5,
+            0x0F..=0x13 => {
+                console_log!("using mbc3");
+                self.memory_bank = MemoryBank::MBC3;
+            },
+            0x19..=0x1E => {
+                console_log!("using mbc5");
+                self.memory_bank = MemoryBank::MBC5;
+            },
             _ => panic!("MBC NOT IMPLEMENTED YET! 0x{:02X}", self.rom_chip[MBC_TYPE])
         };
     }
@@ -164,7 +174,7 @@ impl Memory {
                     }
                     return buttons_pressed
                 }
-                return 0xF;
+                return 0xFF;
             }
             0xFF04..=0xFF07 => self.timer.read_registers(addr),
             0xFF0F => self.IF,
@@ -174,7 +184,7 @@ impl Memory {
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize], // High RAM (HRAM)
             0xFFFF => self.IE,
 
-            _ => 0x00
+            _ => 0xFF
         }
     }
 
@@ -319,11 +329,12 @@ impl Memory {
         }
     }
 
+    /* DOESNT PASS MOONEYE MBC5 */
     fn mbc5_read(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x3FFF => self.rom_chip[(addr & 0x3FFF) as usize],
             0x4000..=0x7FFF => {
-                let offset = ((self.mbc5_rom_bank_number_top_bit as u32) << 22) | ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF);
+                let offset = ((self.mbc5_rom_bank_number_top_bit as u32) << 22) | ((self.rom_bank_number as u32) << 14) | ((addr as u32) & 0x3FFF); // 23 bits long?
                 return self.rom_chip[(offset as usize) & (self.rom_chip.len() - 1)];
             },
             0xA000..=0xBFFF => {
@@ -333,24 +344,27 @@ impl Memory {
                 }
                 return 0xFF
             },
+
+
             _ => panic!("should not have recieved values outside of this region.")
         }
     }
 
+    /* DOESNT PASS MOONEYE MBC5 */
     fn mbc5_write(&mut self, addr: u16, val: u8) {
         match addr {
-            0x0000..=0x1FFF => self.mbc_ram_enabled = true,
+            0x0000..=0x1FFF => self.mbc_ram_enabled = if val & 0x0F == 0x0A { true } else { false },
             0x2000..=0x2FFF => self.rom_bank_number = val,
             0x3000..=0x3FFF => self.mbc5_rom_bank_number_top_bit = val & 0x01,
             0x4000..=0x5FFF => self.ram_rom_bank_number = val & 0x0F,
-            0x6000..=0x7FFF => (),
             0xA000..=0xBFFF => {
                 if self.mbc_ram_enabled {
                     let offset = ((self.ram_rom_bank_number as u32) << 13) | ((addr as u32) & 0x1FFF);
-                    let sram_len = self.sram.len() - 1;
-                    return self.sram[(offset as usize) & sram_len] = val;
+                    self.sram[offset as usize] = val;
                 }
             }
+            0x6000..=0x7FFF => (), // region not mapped in MBC5
+        
             _ => panic!("should not have recieved values outside of this region.")
         }
     }
@@ -393,8 +407,8 @@ impl Memory {
     pub fn update_requested_interrupts(&mut self) {
         let mut requests: u8 = 0x0;
 
-        if !self.ppu.vblank_irq_triggered { // VBLANK interrupt
-            requests |= 0b00000001; 
+        if !self.ppu.vblank_irq_triggered && (self.ppu.stat & 0x3 == 1) { // VBLANK interrupt
+            requests |= 0b00000001;
             self.ppu.vblank_irq_triggered = true;
         }
 
@@ -419,7 +433,7 @@ impl Memory {
     pub fn update_components(&mut self) { // 1 M-cycle
         self.ppu.update();
         self.timer.update();
-        self.apu.update(((self.timer.sysclock >> 12) & 0x1) as u8); // bit 4 of DIV register
+        // self.apu.update(((self.timer.sysclock >> 12) & 0x1) as u8); // bit 4 of DIV register
     }
 
     pub fn get_display(&self) -> Display {
@@ -428,6 +442,7 @@ impl Memory {
 
     pub fn is_frame_rendered(&mut self) -> bool {
         if self.ppu.rendered_frame {
+            // console_log!("frame finished rendering!");
             self.ppu.rendered_frame = false;
             return true;
         }
