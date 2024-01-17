@@ -159,11 +159,16 @@ impl PPU {
     }
 
     pub fn read_vram(&self, addr: u16) -> u8 {
-        return self.vram[addr as usize];
+        if self.get_mode() != Mode::DRAW {
+            return self.vram[addr as usize];
+        }
+        0xFF
     }
 
     pub fn write_vram(&mut self, addr: u16, val: u8) {
-        self.vram[addr as usize] = val;
+        if self.get_mode() != Mode::DRAW {
+            self.vram[addr as usize] = val;
+        }
     }
 
     pub fn read_oam(&self, addr: u16) -> u8 {
