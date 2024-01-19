@@ -1,5 +1,11 @@
 import init, { Emulator } from "./pkg/gb.js";
 
+const frameTimer = new Worker("frame_timer.js");
+
+const REQUEST_FRAME = "REQUEST";
+const RENDER_FRAME = "RENDER";
+const WAIT_FOR_FRAME = "WAIT";
+
 let currentKeyPressed = -1;
 
 class Display {
@@ -7,6 +13,7 @@ class Display {
     this.currentGame = currentGame;
     this.ctx = canvas.getContext("2d");
     this.canvasScale = canvasScale;
+    this.isPaused = false;
   }
 
   changeGame(currentGame) {
@@ -29,6 +36,46 @@ class Gameboy extends Display {
     super.changeCanvasDimensions(160, 144);
     this.emulator = Emulator.new();
     this.colorPallete = ["#FFFFFF", "#AAAAAA", "#555555", "#000000"];
+
+    window.addEventListener("keydown", (e) => {
+      switch (e.code) {
+        case "ArrowUp":
+          currentKeyPressed = 1;
+          break;
+        case "ArrowLeft":
+          currentKeyPressed = 2;
+          break;
+        case "ArrowDown":
+          currentKeyPressed = 3;
+          break;
+        case "ArrowRight":
+          currentKeyPressed = 4;
+          break;
+        case "KeyQ": // A
+          currentKeyPressed = 5;
+          break;
+        case "KeyW": // B
+          currentKeyPressed = 6;
+          break;
+        case "Enter": // START
+          currentKeyPressed = 7;
+          break;
+        case "Escape": // SELECT
+          currentKeyPressed = 8;
+          break;
+        default:
+        // console.log(`Invalid key input: ${e.code}`);
+      }
+    });
+  }
+
+  pause() {
+    super.isPaused = true;
+  }
+
+  resume() {
+    super.isPaused = false;
+    frameTimer.postMessage(REQUEST_FRAME);
   }
 
   run(cartridge) {
@@ -43,17 +90,24 @@ class Gameboy extends Display {
         let colorPallete = this.colorPallete;
         let canvasScale = this.canvasScale;
 
-        function animate() {
-          let display = emulator.render(currentKeyPressed);
-          for (let row = 0; row < 144; row++) {
-            for (let col = 0; col < 160; col++) {
-              ctx.fillStyle = colorPallete[display[row * 160 + col]];
-              ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
+        frameTimer.postMessage(REQUEST_FRAME);
+
+        frameTimer.onmessage = (e) => {
+          if (e.data === RENDER_FRAME) {
+            if (!super.isPaused) {
+              let display = emulator.render(currentKeyPressed);
+              for (let row = 0; row < 144; row++) {
+                for (let col = 0; col < 160; col++) {
+                  ctx.fillStyle = colorPallete[display[row * 160 + col]];
+                  ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
+                }
+              }
+              frameTimer.postMessage(REQUEST_FRAME);
             }
+          } else if (e.data === WAIT_FOR_FRAME) {
+            frameTimer.postMessage(REQUEST_FRAME);
           }
-          requestAnimationFrame(animate);
-        }
-        animate();
+        };
       });
   }
 }
@@ -62,15 +116,6 @@ init().then(() => {
   const canvas = document.getElementById("emulator");
 
   const gameboy = new Gameboy(canvas, null, 4);
-
-  // const romSelect = document.getElementById("rom-select-gb");
-  // romSelect.addEventListener("click", function (e) {
-  //   fetch(`roms/gb/${e.target.value}`)
-  //     .then((res) => res.arrayBuffer())
-  //     .then((buffer) => {
-  //       gameboy.run(buffer);
-  //     });
-  // });
 
   const romUpload = document.getElementById("rom-upload");
   romUpload.addEventListener("change", function (e) {
@@ -107,37 +152,6 @@ init().then(() => {
     link.click();
     document.body.removeChild(link);
   });
-});
-
-window.addEventListener("keydown", (e) => {
-  switch (e.code) {
-    case "ArrowUp":
-      currentKeyPressed = 1;
-      break;
-    case "ArrowLeft":
-      currentKeyPressed = 2;
-      break;
-    case "ArrowDown":
-      currentKeyPressed = 3;
-      break;
-    case "ArrowRight":
-      currentKeyPressed = 4;
-      break;
-    case "KeyQ": // A
-      currentKeyPressed = 5;
-      break;
-    case "KeyW": // B
-      currentKeyPressed = 6;
-      break;
-    case "Enter": // START
-      currentKeyPressed = 7;
-      break;
-    case "Escape": // SELECT
-      currentKeyPressed = 8;
-      break;
-    default:
-      console.log(`Invalid key input: ${e.code}`);
-  }
 });
 
 window.addEventListener("keyup", () => {

@@ -90,6 +90,7 @@ impl PPU {
             0xFF49 => self.obp1,
             0xFF4A => self.wy,
             0xFF4B => self.wx,
+
             _ => unreachable!()
         }
     }
@@ -100,14 +101,15 @@ impl PPU {
                 self.control = val;
                 if self.control >> 7 & 0x1 == 0 { // if LCD is switched off
                     self.stat &= 0b11111100; // reset stat mode to 0
-                    self.ly = 0;
+                    self.ly = 0; // reset ly to 0
+                    self.lcd = [0x03; 23040]; // white out background
                 }
                 return
             },
-            0xFF41 => self.stat = val,
+            0xFF41 => self.stat = (val & 0x78) | (self.stat & 0x07), // bottom 3 bits are read only
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
-            0xFF44 => (), // writes to LY are ignored.
+            0xFF44 => (), // Read only.
             0xFF45 => self.lyc = val,
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
@@ -155,6 +157,7 @@ impl PPU {
                 return Some(self.sprite_buffer.remove(i));
             }
         }
+
         return None
     }
 
@@ -325,6 +328,12 @@ impl PPU {
             self.window_in_frame = true;
         }
 
+        if self.ly == self.lyc {
+            self.stat |= 0x04;
+        } else {
+            self.stat &= !(1 << 2);
+        }
+
         match self.get_mode() {
             Mode::OAMSCAN => {
                 if self.sprite_buffer.len() < 10 {
@@ -395,16 +404,12 @@ impl PPU {
                             self.tick_state.scanline_x += 1;
                         }
 
+                        /* Encountered window for the first time on a scanline */
                         if !self.tick_state.is_fetching_window && self.window_in_frame && ((self.control >> WINDOW_ENABLED) & 0x1 == 1) && self.wx <= self.tick_state.scanline_x as u8 + 7 {
+                            self.tick_state.is_fetching_window = true;
                             self.tick_state.bg_fetcher_step = 0;
                             self.tick_state.fetcher_x = 0;
                             self.background_fifo.clear();
-
-                            // TODO: play around to see the difference this makes.
-                            // self.sprite_fifo.clear();
-                            // self.sprite_buffer.clear();
-
-                            self.tick_state.is_fetching_window = true;
                             break;
                         }
 

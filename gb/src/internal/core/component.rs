@@ -1,7 +1,7 @@
 use crate::internal::ppu::Display;
 use crate ::internal::memory::Memory;
 use crate::internal::core::registers::{Register, Registers, Flag};
-use crate::u32_to_little_endian;
+use crate::{u32_to_little_endian, console_log, log};
 use std;
 
 pub struct CPU {
@@ -817,8 +817,10 @@ impl CPU {
     }
 
     pub fn next_frame(&mut self, keypress: i8) -> Display {
+        let mut cycles_till_timeout = 10000000;
         self.bus.keypress = keypress;
-        while !self.bus.is_frame_rendered() { // represents 1 M-Cycle
+
+        while !self.bus.is_frame_rendered() && cycles_till_timeout > 0 { // represents 1 M-Cycle
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() } // either servicing interrupt or executing a normal instruction
             self.bus.update_components();
             self.bus.update_requested_interrupts();
@@ -839,7 +841,14 @@ impl CPU {
                     }
                 }
             }
+            cycles_till_timeout -= 1;
         }
+
+        // something went wrong and frame wasn't able to get rendered in a proper amount of time.
+        if cycles_till_timeout == 0 {
+            console_log!("TIMED OUT FRAME!!");
+        }
+
         return self.bus.get_display();
     }
 
