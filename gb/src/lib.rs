@@ -60,6 +60,10 @@ impl Emulator {
         self.core.next_frame(keypress).to_vec()
     }
 
+    pub fn debug_panel(&mut self) -> Vec<usize> {
+        self.core.bus.get_debug_panel().to_vec()
+    }
+
     pub fn save_file(&mut self) -> Vec<u8> {
         self.core.create_save_file()
     }

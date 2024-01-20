@@ -22,6 +22,10 @@ export class Emulator {
 */
   render(keypress: number): Uint8Array;
 /**
+* @returns {Uint32Array}
+*/
+  debug_panel(): Uint32Array;
+/**
 * @returns {Uint8Array}
 */
   save_file(): Uint8Array;
@@ -40,6 +44,7 @@ export interface InitOutput {
   readonly emulator_load_bootrom: (a: number, b: number, c: number) => void;
   readonly emulator_load_catridge: (a: number, b: number, c: number) => void;
   readonly emulator_render: (a: number, b: number, c: number) => void;
+  readonly emulator_debug_panel: (a: number, b: number) => void;
   readonly emulator_save_file: (a: number, b: number) => void;
   readonly emulator_load_save_file: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;

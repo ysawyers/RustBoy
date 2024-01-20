@@ -440,6 +440,12 @@ impl Memory {
         self.ppu.lcd
     }
 
+    pub fn get_debug_panel(&mut self) -> [usize; 144 * 3] {
+        let old = self.ppu.debug_panel;
+        self.ppu.debug_panel = [0; 144 * 3];
+        return old;
+    }
+
     pub fn is_frame_rendered(&mut self) -> bool {
         if self.ppu.rendered_frame {
             // console_log!("frame finished rendering!");

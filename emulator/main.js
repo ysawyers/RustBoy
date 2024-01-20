@@ -6,6 +6,7 @@ const REQUEST_FRAME = "REQUEST";
 const RENDER_FRAME = "RENDER";
 const WAIT_FOR_FRAME = "WAIT";
 
+let debugMode = false; // when true debug panel is open
 let currentKeyPressed = -1;
 
 class Display {
@@ -29,7 +30,6 @@ class Display {
   }
 }
 
-// ["#9bbc0f", "#8bac0f", "#306230", "#0f380f"] ["#FFFFFF", "#AAAAAA", "#555555", "#000000"]
 class Gameboy extends Display {
   constructor(canvas, currentGame, canvasScale) {
     super(canvas, currentGame, canvasScale);
@@ -85,21 +85,62 @@ class Gameboy extends Display {
         this.emulator.load_bootrom(new Uint8Array(boot));
         this.emulator.load_catridge(new Uint8Array(cartridge));
 
-        let emulator = this.emulator;
-        let ctx = this.ctx;
-        let colorPallete = this.colorPallete;
-        let canvasScale = this.canvasScale;
+        let debugPanelContainer = document.getElementById("debug-frame");
 
         frameTimer.postMessage(REQUEST_FRAME);
 
         frameTimer.onmessage = (e) => {
           if (e.data === RENDER_FRAME) {
             if (!super.isPaused) {
-              let display = emulator.render(currentKeyPressed);
+              let display = this.emulator.render(currentKeyPressed);
+              if (debugMode) {
+                debugPanelContainer.innerHTML = "";
+
+                let debugPanel = this.emulator.debug_panel();
+                for (let scanline = 0; scanline < 144; scanline++) {
+                  let offset = scanline * 3;
+
+                  let scanlineContainer = document.createElement("div");
+                  scanlineContainer.style.display = "flex";
+                  scanlineContainer.style.flexDirection = "row";
+
+                  let oamScanLength = document.createElement("div");
+                  oamScanLength.style.height = "1.5px";
+                  oamScanLength.style.width = `${(debugPanel[offset] / 456) * 100}%`;
+                  oamScanLength.style.backgroundColor = "blue";
+
+                  scanlineContainer.appendChild(oamScanLength);
+
+                  let drawLength = document.createElement("div");
+                  drawLength.style.height = "1.5px";
+                  drawLength.style.width = `${
+                    ((debugPanel[offset + 1] - debugPanel[offset]) / 456) * 100
+                  }%`;
+                  drawLength.style.backgroundColor = "green";
+
+                  scanlineContainer.appendChild(drawLength);
+
+                  let hblankLength = document.createElement("div");
+                  hblankLength.style.height = "1.5px";
+                  hblankLength.style.width = `${
+                    ((debugPanel[offset + 2] - debugPanel[offset + 1]) / 456) * 100
+                  }%`;
+                  hblankLength.style.backgroundColor = "black";
+
+                  scanlineContainer.appendChild(hblankLength);
+
+                  debugPanelContainer.appendChild(scanlineContainer);
+                }
+              }
               for (let row = 0; row < 144; row++) {
                 for (let col = 0; col < 160; col++) {
-                  ctx.fillStyle = colorPallete[display[row * 160 + col]];
-                  ctx.fillRect(col * canvasScale, row * canvasScale, canvasScale, canvasScale);
+                  this.ctx.fillStyle = this.colorPallete[display[row * 160 + col]];
+                  this.ctx.fillRect(
+                    col * this.canvasScale,
+                    row * this.canvasScale,
+                    this.canvasScale,
+                    this.canvasScale
+                  );
                 }
               }
               frameTimer.postMessage(REQUEST_FRAME);
@@ -151,6 +192,18 @@ init().then(() => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  });
+
+  const toggleDebugPanelButton = document.getElementById("toggle-debug-panel-button");
+  toggleDebugPanelButton.addEventListener("click", function (e) {
+    let panel = document.getElementById("debug-panel");
+
+    debugMode = !debugMode;
+    if (debugMode) {
+      panel.style.display = "block";
+    } else {
+      panel.style.display = "none";
+    }
   });
 });
 

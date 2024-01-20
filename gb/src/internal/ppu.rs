@@ -44,6 +44,8 @@ pub struct PPU {
     sprite_fifo: Vec<ObjectPixel>,
     background_fifo: Vec<u8>,
     sprite_buffer: Vec<Object>,
+
+    pub debug_panel: [usize; 144 * 3],
 }
 
 struct TickState {
@@ -134,9 +136,18 @@ impl PPU {
     fn update_mode(&mut self, mode: Mode) {
         self.stat &= 0b11111100;
         match mode {
-            Mode::OAMSCAN => self.stat |= 0b00000010,
-            Mode::DRAW => self.stat |= 0b00000011,
-            Mode::HBLANK => self.stat |= 0b00000000,
+            Mode::OAMSCAN => {
+                self.debug_panel[((self.ly as usize) * 3) + 2] = self.scanline_timeline; // hblank had just ended
+                self.stat |= 0b00000010
+            },
+            Mode::DRAW => {
+                self.debug_panel[(self.ly as usize) * 3] = self.scanline_timeline; // oam had just ended
+                self.stat |= 0b00000011
+            },
+            Mode::HBLANK => {
+                self.debug_panel[((self.ly as usize) * 3) + 1] = self.scanline_timeline; // draw has just ended
+                self.stat |= 0b00000000
+            },
             Mode::VBLANK => self.stat |= 0b00000001,
         };
     }
@@ -474,6 +485,7 @@ impl Default for PPU {
     fn default() -> Self {
         Self {
             lcd: [0; 23040],
+            debug_panel: [0; 144 * 3],
             vram: [0x0; 0x2000],
             oam: [0x0; 0xA0],
             ly: 0,
@@ -498,7 +510,7 @@ impl Default for PPU {
             window_in_frame: false,
             window_line_counter: 0,
             rendered_window_on_scanline: false,
-            rendered_frame: false
+            rendered_frame: false,
         }
     }
 }
@@ -516,7 +528,7 @@ impl Default for TickState {
             tile_number: 0,
             new_scanline: true,
             current_sprite: None,
-            is_fetching_window: false
+            is_fetching_window: false,
         }
     }
 }
