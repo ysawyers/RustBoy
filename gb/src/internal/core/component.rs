@@ -827,7 +827,7 @@ impl CPU {
             self.bus.update_requested_interrupts();
             if self.ime && self.tick_state.is_none() { // if interrupts are enabled service potential interrupts
                 if (self.bus.IE & self.bus.IF) != 0 { // an interrupt has been requested and can potentially be handled
-                    for i in 0..5 { // handles interrupts based on their priority
+                    for i in 0..3 { // handles interrupts based on their priority
                         if (self.bus.IF >> i) & 0x1 == 1 && (self.bus.IE >> i) & 0x1 == 1 { // interrupt has been requested and allowed by IE
                             match i {
                                 0 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::VBLANK, step: 0 }),
