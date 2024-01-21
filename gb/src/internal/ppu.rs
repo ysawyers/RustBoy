@@ -1,5 +1,3 @@
-use crate::{console_log, log};
-
 const LCD_ENABLED: u8 = 7;
 const WINDOW_TILE_MAP: u8 = 6;
 const WINDOW_ENABLED: u8 = 5;
@@ -18,15 +16,16 @@ pub type Display = [u8; 23040];
 
 pub struct PPU {
     pub lcd: Display,
-    pub ly: u8,
-    pub lyc: u8,
-    pub control: u8,
-    pub stat: u8,
     pub oam: [u8; 0xA0],
     pub vram: [u8; 0x2000],
     pub vblank_irq_triggered: bool,
     pub stat_irq_triggered: bool,
     pub rendered_frame: bool,
+    pub debug_panel: [usize; 144 * 3],
+    control: u8,
+    stat: u8,
+    ly: u8,
+    lyc: u8,
     scy: u8,
     scx: u8,
     wy: u8,
@@ -44,8 +43,6 @@ pub struct PPU {
     sprite_fifo: Vec<ObjectPixel>,
     background_fifo: Vec<u8>,
     sprite_buffer: Vec<Object>,
-
-    pub debug_panel: [usize; 144 * 3],
 }
 
 struct TickState {
@@ -112,7 +109,14 @@ impl PPU {
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
             0xFF44 => (), // Read only.
-            0xFF45 => self.lyc = val,
+            0xFF45 => {
+                self.lyc = val;
+                if self.ly == self.lyc {
+                    self.stat |= 1 << 2;
+                } else {
+                    self.stat &= !(1 << 2);
+                }
+            },
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
             0xFF49 => self.obp1 = val, 
@@ -339,12 +343,6 @@ impl PPU {
             self.window_in_frame = true;
         }
 
-        if self.ly == self.lyc {
-            self.stat |= 0x04;
-        } else {
-            self.stat &= !(1 << 2);
-        }
-
         match self.get_mode() {
             Mode::OAMSCAN => {
                 if self.sprite_buffer.len() < 10 {
@@ -445,6 +443,11 @@ impl PPU {
 
                     self.stat_irq_triggered = false;
                     self.ly += 1;
+                    if self.ly == self.lyc {
+                        self.stat |= 1 << 2;
+                    } else {
+                        self.stat &= !(1 << 2);
+                    }
                     if self.ly > 143 {
                         self.update_mode(Mode::VBLANK);
                     } else {
@@ -456,14 +459,19 @@ impl PPU {
                 self.window_line_counter = 0;
                 self.vblank_timeline += 2;
                 if self.vblank_timeline == 4560 { // 4560 dots per vblank
+                    self.rendered_frame = true;
                     self.vblank_timeline = 0;
                     self.ly = 0;
                     self.vblank_irq_triggered = false;
                     self.window_in_frame = false;
                     self.update_mode(Mode::OAMSCAN);
-                    self.rendered_frame = true;
                 } else if self.vblank_timeline % 456 == 0 {
                     self.ly += 1;
+                    if self.ly == self.lyc {
+                        self.stat |= 1 << 2;
+                    } else {
+                        self.stat &= !(1 << 2);
+                    }
                 }
             }
         }

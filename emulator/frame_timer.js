@@ -1,4 +1,4 @@
-let delay_between_frames = 1000 / 59.7;
+let delay_between_frames = 1000 / 1000; // 59.7
 
 let frame_start = performance.now();
 let busy_loop = false;

@@ -30,7 +30,7 @@ pub struct Memory {
 
     boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
-    boot_rom_mounted: bool,
+    pub boot_rom_mounted: bool,
 
     memory_bank: MemoryBank,
     banking_mode: BankingMode,
@@ -45,7 +45,7 @@ pub struct Memory {
     joyp: u8,
 
     ppu: PPU,
-    apu: APU,
+    //apu: APU,
     pub timer: Timer
 }
 
@@ -78,12 +78,12 @@ impl Memory {
 
         match self.rom_chip[MBC_TYPE] {
             0x00 => {
-                console_log!("using mbc none.");
+                // console_log!("using mbc none.");
                 self.memory_bank = MemoryBank::MBCNONE;
                 self.rom_chip.resize(0x10000, 0x00);
             },
             0x01..=0x03 => {
-                console_log!("using mbc1");
+                // console_log!("using mbc1");
                 self.memory_bank = MemoryBank::MBC1;
 
                 // checks if MBC1M instead
@@ -104,11 +104,11 @@ impl Memory {
                 }
             },
             0x0F..=0x13 => {
-                console_log!("using mbc3");
+                // console_log!("using mbc3");
                 self.memory_bank = MemoryBank::MBC3;
             },
             0x19..=0x1E => {
-                console_log!("using mbc5");
+                // console_log!("using mbc5");
                 self.memory_bank = MemoryBank::MBC5;
             },
             _ => panic!("MBC NOT IMPLEMENTED YET! 0x{:02X}", self.rom_chip[MBC_TYPE])
@@ -407,16 +407,16 @@ impl Memory {
     pub fn update_requested_interrupts(&mut self) {
         let mut requests: u8 = 0x0;
 
-        if !self.ppu.vblank_irq_triggered && (self.ppu.stat & 0x3 == 1) { // VBLANK interrupt
+        if !self.ppu.vblank_irq_triggered && (self.ppu.read_registers(0xFF41) & 0x3 == 1) { // VBLANK interrupt
             requests |= 0b00000001;
             self.ppu.vblank_irq_triggered = true;
         }
 
         if !self.ppu.stat_irq_triggered {
-            if ((self.ppu.stat >> 6) & 0x1 == 1) && (self.ppu.ly == self.ppu.lyc) { requests |= 0b00000010; } // STAT interrupt (LY == LYC)
-            if ((self.ppu.stat >> 5) & 0x1 == 1) && (self.ppu.stat & 0x3 == 2) { requests |= 0b00000010 }; // STAT interrupt (OAM)
-            if ((self.ppu.stat >> 4) & 0x1 == 1) && (self.ppu.stat & 0x3 == 1) { requests |= 0b00000010 }; // STAT interrupt (VBLANK)
-            if ((self.ppu.stat >> 3) & 0x1 == 1) && (self.ppu.stat & 0x3 == 0) { requests |= 0b00000010 }; // STAT interrupt (HBLANK)
+            if ((self.ppu.read_registers(0xFF41) >> 6) & 0x1 == 1) && (self.ppu.read_registers(0xFF41) >> 2 & 0x1 == 1) { requests |= 0b00000010; } // STAT interrupt (LY == LYC)
+            if ((self.ppu.read_registers(0xFF41) >> 5) & 0x1 == 1) && (self.ppu.read_registers(0xFF41) & 0x3 == 2) { requests |= 0b00000010 }; // STAT interrupt (OAM)
+            if ((self.ppu.read_registers(0xFF41) >> 4) & 0x1 == 1) && (self.ppu.read_registers(0xFF41) & 0x3 == 1) { requests |= 0b00000010 }; // STAT interrupt (VBLANK)
+            if ((self.ppu.read_registers(0xFF41) >> 3) & 0x1 == 1) && (self.ppu.read_registers(0xFF41) & 0x3 == 0) { requests |= 0b00000010 }; // STAT interrupt (HBLANK)
             self.ppu.stat_irq_triggered = true;
         }
 
@@ -427,7 +427,7 @@ impl Memory {
             }
         }
 
-        self.IF |= requests;
+        self.IF |= requests | 0xE0;
     }
 
     pub fn update_components(&mut self) { // 1 M-cycle
@@ -477,7 +477,7 @@ impl Default for Memory {
             hram: [0x0; 0x7F],
             wram: [0x0; 0x2000],
             sram: vec![],
-            apu: APU::default(),
+            //apu: APU::default(),
             bess_buffer_offsets: vec![],
             mbc5_rom_bank_number_top_bit: 0,
         }

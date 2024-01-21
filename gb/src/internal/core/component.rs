@@ -14,6 +14,7 @@ pub struct CPU {
     tick_state: Option<TickState>,
     interrupt_tick_state: Option<InterruptTickState>,
     is_halted: bool,
+    halt_bug: bool,
 }
 
 pub struct Instruction {
@@ -817,10 +818,10 @@ impl CPU {
     }
 
     pub fn next_frame(&mut self, keypress: i8) -> Display {
-        let mut cycles_till_timeout = 10000000;
         self.bus.keypress = keypress;
+        let mut cycles_to_timeout = 1000000;
 
-        while !self.bus.is_frame_rendered() && cycles_till_timeout > 0 { // represents 1 M-Cycle
+        while !self.bus.is_frame_rendered() && cycles_to_timeout > 0 { // represents 1 M-Cycle
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() } // either servicing interrupt or executing a normal instruction
             self.bus.update_components();
             self.bus.update_requested_interrupts();
@@ -832,7 +833,7 @@ impl CPU {
                                 0 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::VBLANK, step: 0 }),
                                 1 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::STAT, step: 0 }),
                                 2 => self.interrupt_tick_state.get_or_insert(InterruptTickState { interrupt: Interrupt::TIMER, step: 0 }),
-                                _ => unreachable!()
+                                _ => unimplemented!("interrupt not implemented yet.")
                             };
                             self.bus.IF &= !(1 << i); // reset the bit that has been requested while processing
                             self.ime = false; // disable interrupts to prevent anymore from being serviced while processing the current one
@@ -841,12 +842,11 @@ impl CPU {
                     }
                 }
             }
-            cycles_till_timeout -= 1;
+            cycles_to_timeout -= 1;
         }
 
-        // something went wrong and frame wasn't able to get rendered in a proper amount of time.
-        if cycles_till_timeout == 0 {
-            console_log!("TIMED OUT FRAME!!");
+        if cycles_to_timeout == 0 {
+            panic!("halt bug loop.")
         }
 
         return self.bus.get_display();
@@ -1034,6 +1034,7 @@ impl Default for CPU {
             should_enable_ime: 0,
             interrupt_tick_state: None,
             is_halted: false,
+            halt_bug: false
         }
     }
 }

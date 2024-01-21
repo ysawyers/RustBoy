@@ -1,5 +1,3 @@
-use crate::{console_log, log};
-
 // NRxy: nr0-4 IS THE REGISTER ID AND THE INDEX [X] IS THE CHANNEL
 pub struct APU {
     prev_div_apu_bit: u8,
@@ -103,7 +101,7 @@ impl APU {
                     self.ch1_initial_length_timer += 1;
 
                     if self.ch1_initial_length_timer == 64 {
-                        console_log!("channel 1 length counter overflow!");
+                        // console_log!("channel 1 length counter overflow!");
 
                         self.nr5[2] &= !(1 << 0); // switches channel 1 off when length timer gets overflowed.
                         self.ch1_initial_length_timer = 0;
