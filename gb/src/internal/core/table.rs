@@ -1,8 +1,9 @@
-use std::fs::OpenOptions;
-use std::io::Write;
+// use std::fs::OpenOptions;
+// use std::io::Write;
 
 use crate::internal::core::component::{MicroInstr, Byte, CPU, Instruction};
 use crate::internal::core::registers::{Register, Flag};
+use crate::{console_log, log};
 
 impl CPU {
     pub fn decode_instr(&self, opcode: u8) -> Vec<MicroInstr> {
@@ -269,21 +270,21 @@ impl CPU {
             _ => panic!("Unexpected opcode encountered 0x{:02X}", opcode)
         };
 
-        if !self.bus.boot_rom_mounted {
-            // let line = format!("{} ~ PC: 0x{:04X} IF: 0b{:08b} IE: 0b{:08b} IME: {} STAT: 0b{:08b}", instruction.name, self.pc - 1, self.bus.IF, self.bus.IE, self.ime, self.bus.read(0xFF41));
-            // println!("{}", line);
+        // let line = format!("{} ~ PC: 0x{:04X} IF: 0b{:08b} IE: 0b{:08b} IME: {} STAT: 0b{:08b}", instruction.name, self.pc - 1, self.bus.IF, self.bus.IE, self.ime, self.bus.read(0xFF41));
+        // console_log!("{}", line);
 
-            // let mut file = OpenOptions::new()
-            //     .write(true)
-            //     .append(true)
-            //     .open("output.txt")
-            //     .unwrap();
+        // println!("{}", line);
 
-            // if let Err(e) = writeln!(file, "{}", line) {
-            //     eprintln!("Couldn't write to file: {}", e);
-            // }
-        }
+        // let mut file = OpenOptions::new()
+        //     .write(true)
+        //     .append(true)
+        //     .open("output.txt")
+        //     .unwrap();
 
+        // if let Err(e) = writeln!(file, "{}", line) {
+        //     eprintln!("Couldn't write to file: {}", e);
+        // }
+    
         return instruction.steps
     }
 }

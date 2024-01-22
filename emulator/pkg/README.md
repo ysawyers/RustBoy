@@ -18,6 +18,11 @@ Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/m
 
 ![save file representation](https://github.com/ysawyers/emufun/blob/main/gb/imgs/bess-encoding.png "Save file representation")
 
-# TODO
+# Future Steps
 
 - Finish APU
+- CGB?
+
+# Known bugs
+
+- Crashing on Donkey Kong Land (something between LY == LYC interrupts / halt bug)

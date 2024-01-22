@@ -4,6 +4,8 @@ use crate::internal::core::registers::{Register, Registers, Flag};
 use crate::{u32_to_little_endian, console_log, log};
 use std;
 
+use super::registers;
+
 pub struct CPU {
     pub registers: Registers,
     pub pc: u16,
@@ -819,7 +821,7 @@ impl CPU {
 
     pub fn next_frame(&mut self, keypress: i8) -> Display {
         self.bus.keypress = keypress;
-        let mut cycles_to_timeout = 1000000;
+        let mut cycles_to_timeout = 1000000; // TODO: Figure out that weird bug that crashes games from either interrupt or halt
 
         while !self.bus.is_frame_rendered() && cycles_to_timeout > 0 { // represents 1 M-Cycle
             if self.interrupt_tick_state.is_none() { self.execute() } else { self.execute_interrupt() } // either servicing interrupt or executing a normal instruction
@@ -1019,6 +1021,23 @@ impl CPU {
         self.tick_state = None;
         self.interrupt_tick_state = None;
         self.bus.IF = 0x00;
+    }
+
+    // manually sets registers to skip the boot rom
+    pub fn initialize_core(&mut self, bytes: Vec<u8>) {
+        self.registers[Register::A] = 0x01;
+        self.registers[Register::F] = 0xB0;
+        self.registers[Register::B] = 0x00;
+        self.registers[Register::C] = 0x13;
+        self.registers[Register::D] = 0x00;
+        self.registers[Register::E] = 0xD8;
+        self.registers[Register::H] = 0x01;
+        self.registers[Register::L] = 0x4D;
+        self.sp = 0xFFFE;
+        self.pc = 0x0100;
+
+       self.bus.write(0xFF40, 0x80);
+       self.bus.write(0xFF44, 0x91);
     }
 }
 

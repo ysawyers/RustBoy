@@ -49,7 +49,7 @@ impl Emulator {
     }
 
     pub fn load_bootrom(&mut self, bytes: Vec<u8>) {
-        self.core.bus.mount_bootrom(bytes);
+        self.core.initialize_core(bytes);
     }
 
     pub fn load_catridge(&mut self, bytes: Vec<u8>) {

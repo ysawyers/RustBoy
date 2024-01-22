@@ -54,12 +54,12 @@ impl Memory {
                                       0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
                                       0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E];
 
-    pub fn mount_bootrom(&mut self, bytes: Vec<u8>) {
-        for i in 0..bytes.len() {
-            self.boot_rom[i] = bytes[i];
-        }
-        self.boot_rom_mounted = true;
-    }
+    // pub fn mount_bootrom(&mut self, bytes: Vec<u8>) {
+    //     // for i in 0..bytes.len() {
+    //     //     self.boot_rom[i] = bytes[i];
+    //     // }
+    //     self.boot_rom_mounted = false;
+    // }
 
     pub fn load_cartridge(&mut self, bytes: Vec<u8>) {
         self.rom_chip = bytes;

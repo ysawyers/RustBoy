@@ -1,3 +1,5 @@
+use crate::{console_log, log};
+
 const LCD_ENABLED: u8 = 7;
 const WINDOW_TILE_MAP: u8 = 6;
 const WINDOW_ENABLED: u8 = 5;
