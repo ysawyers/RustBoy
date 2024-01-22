@@ -48,11 +48,9 @@ impl Emulator {
         }
     }
 
-    pub fn load_bootrom(&mut self, bytes: Vec<u8>) {
-        self.core.initialize_core(bytes);
-    }
-
     pub fn load_catridge(&mut self, bytes: Vec<u8>) {
+        self.core = CPU::default();
+        self.core.initialize_core();
         self.core.bus.load_cartridge(bytes);
     }
 

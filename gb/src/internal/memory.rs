@@ -30,7 +30,6 @@ pub struct Memory {
 
     boot_rom: [u8; 0x100],
     mbc_ram_enabled: bool,
-    pub boot_rom_mounted: bool,
 
     memory_bank: MemoryBank,
     banking_mode: BankingMode,
@@ -53,13 +52,6 @@ impl Memory {
     const NINTENDO_LOGO: [u8; 48] = [0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
                                       0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
                                       0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E];
-
-    // pub fn mount_bootrom(&mut self, bytes: Vec<u8>) {
-    //     // for i in 0..bytes.len() {
-    //     //     self.boot_rom[i] = bytes[i];
-    //     // }
-    //     self.boot_rom_mounted = false;
-    // }
 
     pub fn load_cartridge(&mut self, bytes: Vec<u8>) {
         self.rom_chip = bytes;
@@ -123,10 +115,6 @@ impl Memory {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
-        if self.boot_rom_mounted && addr <= 0xFF {
-            return self.boot_rom[addr as usize]
-        }
-
         match addr {
             0x0000..=0x7FFF => {
                 if self.memory_bank == MemoryBank::MBC1 {
@@ -180,7 +168,7 @@ impl Memory {
             0xFF0F => self.IF,
             //0xFF10..=0xFF3F => self.apu.read_registers(addr),
             0xFF40..=0xFF4B => self.ppu.read_registers(addr),
-            0xFF50 => if self.boot_rom_mounted { 0x00 } else { 0x01 },
+            0xFF50 => 0x01,
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize], // High RAM (HRAM)
             0xFFFF => self.IE,
 
@@ -217,13 +205,7 @@ impl Memory {
             //0xFF10..=0xFF3F => self.apu.write_registers(addr, val),
             0xFF46 => self.oam_dma_transfer((val as u16) << 8),
             0xFF40..=0xFF4B => self.ppu.write_registers(addr, val),
-            0xFF50 => {
-                if val & 0x1 == 1 { // bit 0 must be explicitly set to unmap the bootrom
-                    self.boot_rom_mounted = false;
-                } else {
-                    self.boot_rom_mounted = true; // prevents mounting bootrom before all data has been loaded in from previous save.
-                }
-            },
+            0xFF50 => (),
             0xFF80..=0xFFFE => self.hram[(addr - 0xFF80) as usize] = val, // High RAM (HRAM)
             0xFFFF => self.IE = val,
 
@@ -448,7 +430,6 @@ impl Memory {
 
     pub fn is_frame_rendered(&mut self) -> bool {
         if self.ppu.rendered_frame {
-            // console_log!("frame finished rendering!");
             self.ppu.rendered_frame = false;
             return true;
         }
@@ -464,7 +445,6 @@ impl Default for Memory {
             memory_bank: MemoryBank::MBCNONE,
             mbc_ram_enabled: false,
             boot_rom: [0x0; 0x100],
-            boot_rom_mounted: false,
             ppu: PPU::default(),
             IE: 0x0,
             IF: 0x0,

@@ -169,14 +169,6 @@ export class Emulator {
     /**
     * @param {Uint8Array} bytes
     */
-    load_bootrom(bytes) {
-        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.emulator_load_bootrom(this.__wbg_ptr, ptr0, len0);
-    }
-    /**
-    * @param {Uint8Array} bytes
-    */
     load_catridge(bytes) {
         const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;

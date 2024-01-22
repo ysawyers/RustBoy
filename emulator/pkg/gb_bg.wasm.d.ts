@@ -3,7 +3,6 @@
 export const memory: WebAssembly.Memory;
 export function __wbg_emulator_free(a: number): void;
 export function emulator_new(): number;
-export function emulator_load_bootrom(a: number, b: number, c: number): void;
 export function emulator_load_catridge(a: number, b: number, c: number): void;
 export function emulator_render(a: number, b: number, c: number): void;
 export function emulator_debug_panel(a: number, b: number): void;

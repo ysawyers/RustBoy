@@ -1024,7 +1024,7 @@ impl CPU {
     }
 
     // manually sets registers to skip the boot rom
-    pub fn initialize_core(&mut self, bytes: Vec<u8>) {
+    pub fn initialize_core(&mut self) {
         self.registers[Register::A] = 0x01;
         self.registers[Register::F] = 0xB0;
         self.registers[Register::B] = 0x00;

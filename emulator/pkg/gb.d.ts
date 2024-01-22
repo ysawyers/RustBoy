@@ -11,10 +11,6 @@ export class Emulator {
 /**
 * @param {Uint8Array} bytes
 */
-  load_bootrom(bytes: Uint8Array): void;
-/**
-* @param {Uint8Array} bytes
-*/
   load_catridge(bytes: Uint8Array): void;
 /**
 * @param {number} keypress
@@ -41,7 +37,6 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_emulator_free: (a: number) => void;
   readonly emulator_new: () => number;
-  readonly emulator_load_bootrom: (a: number, b: number, c: number) => void;
   readonly emulator_load_catridge: (a: number, b: number, c: number) => void;
   readonly emulator_render: (a: number, b: number, c: number) => void;
   readonly emulator_debug_panel: (a: number, b: number) => void;

@@ -79,77 +79,72 @@ class Gameboy extends Display {
   }
 
   run(cartridge) {
-    fetch("binaries/DMG_ROM.bin")
-      .then((res) => res.arrayBuffer())
-      .then((boot) => {
-        this.emulator.load_bootrom(new Uint8Array(boot));
-        this.emulator.load_catridge(new Uint8Array(cartridge));
+    this.emulator.load_catridge(new Uint8Array(cartridge));
 
-        let debugPanelContainer = document.getElementById("debug-frame");
+    let debugPanelContainer = document.getElementById("debug-frame");
 
-        frameTimer.postMessage(REQUEST_FRAME);
+    frameTimer.postMessage(REQUEST_FRAME);
 
-        frameTimer.onmessage = (e) => {
-          if (e.data === RENDER_FRAME) {
-            if (!super.isPaused) {
-              let display = this.emulator.render(currentKeyPressed);
-              if (debugMode) {
-                debugPanelContainer.innerHTML = "";
+    frameTimer.onmessage = (e) => {
+      if (e.data === RENDER_FRAME) {
+        if (!super.isPaused) {
+          let display = this.emulator.render(currentKeyPressed);
+          if (debugMode) {
+            debugPanelContainer.innerHTML = "";
 
-                let debugPanel = this.emulator.debug_panel();
-                for (let scanline = 0; scanline < 144; scanline++) {
-                  let offset = scanline * 3;
+            let debugPanel = this.emulator.debug_panel();
+            for (let scanline = 0; scanline < 144; scanline++) {
+              let offset = scanline * 3;
 
-                  let scanlineContainer = document.createElement("div");
-                  scanlineContainer.style.display = "flex";
-                  scanlineContainer.style.flexDirection = "row";
+              let scanlineContainer = document.createElement("div");
+              scanlineContainer.style.display = "flex";
+              scanlineContainer.style.flexDirection = "row";
 
-                  let oamScanLength = document.createElement("div");
-                  oamScanLength.style.height = "1.5px";
-                  oamScanLength.style.width = `${(debugPanel[offset] / 456) * 100}%`;
-                  oamScanLength.style.backgroundColor = "blue";
+              let oamScanLength = document.createElement("div");
+              oamScanLength.style.height = "1.5px";
+              oamScanLength.style.width = `${(debugPanel[offset] / 456) * 100}%`;
+              oamScanLength.style.backgroundColor = "blue";
 
-                  scanlineContainer.appendChild(oamScanLength);
+              scanlineContainer.appendChild(oamScanLength);
 
-                  let drawLength = document.createElement("div");
-                  drawLength.style.height = "1.5px";
-                  drawLength.style.width = `${
-                    ((debugPanel[offset + 1] - debugPanel[offset]) / 456) * 100
-                  }%`;
-                  drawLength.style.backgroundColor = "green";
+              let drawLength = document.createElement("div");
+              drawLength.style.height = "1.5px";
+              drawLength.style.width = `${
+                ((debugPanel[offset + 1] - debugPanel[offset]) / 456) * 100
+              }%`;
+              drawLength.style.backgroundColor = "green";
 
-                  scanlineContainer.appendChild(drawLength);
+              scanlineContainer.appendChild(drawLength);
 
-                  let hblankLength = document.createElement("div");
-                  hblankLength.style.height = "1.5px";
-                  hblankLength.style.width = `${
-                    ((debugPanel[offset + 2] - debugPanel[offset + 1]) / 456) * 100
-                  }%`;
-                  hblankLength.style.backgroundColor = "black";
+              let hblankLength = document.createElement("div");
+              hblankLength.style.height = "1.5px";
+              hblankLength.style.width = `${
+                ((debugPanel[offset + 2] - debugPanel[offset + 1]) / 456) * 100
+              }%`;
+              hblankLength.style.backgroundColor = "black";
 
-                  scanlineContainer.appendChild(hblankLength);
+              scanlineContainer.appendChild(hblankLength);
 
-                  debugPanelContainer.appendChild(scanlineContainer);
-                }
-              }
-              for (let row = 0; row < 144; row++) {
-                for (let col = 0; col < 160; col++) {
-                  this.ctx.fillStyle = this.colorPallete[display[row * 160 + col]];
-                  this.ctx.fillRect(
-                    col * this.canvasScale,
-                    row * this.canvasScale,
-                    this.canvasScale,
-                    this.canvasScale
-                  );
-                }
-              }
-              frameTimer.postMessage(REQUEST_FRAME);
+              debugPanelContainer.appendChild(scanlineContainer);
             }
-          } else if (e.data === WAIT_FOR_FRAME) {
-            frameTimer.postMessage(REQUEST_FRAME);
           }
-        };
-      });
+          for (let row = 0; row < 144; row++) {
+            for (let col = 0; col < 160; col++) {
+              this.ctx.fillStyle = this.colorPallete[display[row * 160 + col]];
+              this.ctx.fillRect(
+                col * this.canvasScale,
+                row * this.canvasScale,
+                this.canvasScale,
+                this.canvasScale
+              );
+            }
+          }
+          frameTimer.postMessage(REQUEST_FRAME);
+        }
+      } else if (e.data === WAIT_FOR_FRAME) {
+        frameTimer.postMessage(REQUEST_FRAME);
+      }
+    };
   }
 }
 
