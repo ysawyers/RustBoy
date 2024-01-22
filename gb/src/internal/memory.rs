@@ -70,12 +70,10 @@ impl Memory {
 
         match self.rom_chip[MBC_TYPE] {
             0x00 => {
-                // console_log!("using mbc none.");
                 self.memory_bank = MemoryBank::MBCNONE;
                 self.rom_chip.resize(0x10000, 0x00);
             },
             0x01..=0x03 => {
-                // console_log!("using mbc1");
                 self.memory_bank = MemoryBank::MBC1;
 
                 // checks if MBC1M instead
@@ -95,14 +93,8 @@ impl Memory {
                     }
                 }
             },
-            0x0F..=0x13 => {
-                // console_log!("using mbc3");
-                self.memory_bank = MemoryBank::MBC3;
-            },
-            0x19..=0x1E => {
-                // console_log!("using mbc5");
-                self.memory_bank = MemoryBank::MBC5;
-            },
+            0x0F..=0x13 => self.memory_bank = MemoryBank::MBC3,
+            0x19..=0x1E => self.memory_bank = MemoryBank::MBC5,
             _ => panic!("MBC NOT IMPLEMENTED YET! 0x{:02X}", self.rom_chip[MBC_TYPE])
         };
     }
@@ -356,6 +348,7 @@ impl Memory {
             MemoryBank::MBCNONE => None,
             MemoryBank::MBC1 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x40, self.ram_rom_bank_number, 0x00, 0x60, if self.banking_mode == BankingMode::ADVANCED { 1 } else { 0 }]),
             MemoryBank::MBC3 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, if self.rom_bank_number == 0x01 { 0x00 } else { self.rom_bank_number }, 0x00, 0x40, self.ram_rom_bank_number]), // latch key not implemented as well as RTC register
+            MemoryBank::MBC5 => Some(vec![0x00, 0x00, if self.mbc_ram_enabled { 0x0A } else { 0x00 }, 0x00, 0x20, self.rom_bank_number, 0x00, 0x30, self.mbc5_rom_bank_number_top_bit, 0x00, 0x40, self.ram_rom_bank_number]),
             _ => unreachable!()
         }
     }

@@ -26,3 +26,4 @@ Files are saved using the BESS encoding https://github.com/LIJI32/SameBoy/blob/m
 # Known bugs
 
 - Crashing on Donkey Kong Land (something between LY == LYC interrupts / halt bug)
+- Weird PPU glitching when re-enabled on 1st scanline
